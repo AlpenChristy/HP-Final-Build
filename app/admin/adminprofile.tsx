@@ -2,10 +2,11 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, us
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { ArrowLeft, ChevronRight, Edit, Lock, LogOut, Trash2, User, Users, X } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
+import { subAdminService, SubAdminData, SubAdminPermissions } from '../../core/services/subAdminService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -64,36 +65,61 @@ const ChangePasswordContent = () => (
     </View>
 );
 
-const SubAdminContent = ({ setModalView, setEditingAdmin }: { setModalView: any, setEditingAdmin: any }) => {
-    const [subAdmins, setSubAdmins] = useState([
-        { id: '1', name: 'Sub Admin 1', email: 'sub1@example.com', phone: '+91 98765 43210', permissions: { orders: true, delivery: false, products: true } },
-        { id: '2', name: 'Sub Admin 2', email: 'sub2@example.com', phone: '+91 98765 43211', permissions: { orders: false, delivery: true, products: false } },
-    ]);
-
-    const handleEdit = (admin: any) => {
+const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSubAdmin }: { 
+    setModalView: any, 
+    setEditingAdmin: any,
+    subAdmins: SubAdminData[],
+    onDeleteSubAdmin: (uid: string) => void
+}) => {
+    const handleEdit = (admin: SubAdminData) => {
         setEditingAdmin(admin);
         setModalView('addOrEdit');
     }
 
+    const handleDelete = (admin: SubAdminData) => {
+        Alert.alert(
+            'Delete Sub-Admin',
+            `Are you sure you want to delete ${admin.displayName}? This action cannot be undone.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => onDeleteSubAdmin(admin.uid),
+                },
+            ]
+        );
+    };
+
     return (
         <View>
             {subAdmins.map(admin => (
-                <View key={admin.id} style={styles.subAdminCard}>
+                <View key={admin.uid} style={styles.subAdminCard}>
                     <View style={{flex: 1}}>
-                        <Text style={styles.subAdminName}>{admin.name}</Text>
+                        <Text style={styles.subAdminName}>{admin.displayName}</Text>
                         <Text style={styles.subAdminEmail}>{admin.email}</Text>
                         <View style={styles.permissionTags}>
+                            {admin.permissions.dashboard && <Text style={styles.permissionTag}>Dashboard</Text>}
                             {admin.permissions.orders && <Text style={styles.permissionTag}>Orders</Text>}
                             {admin.permissions.delivery && <Text style={styles.permissionTag}>Delivery</Text>}
                             {admin.permissions.products && <Text style={styles.permissionTag}>Products</Text>}
                         </View>
                     </View>
                     <View style={styles.subAdminActions}>
-                        <TouchableOpacity onPress={() => handleEdit(admin)}><Edit size={18} color={Colors.primary} /></TouchableOpacity>
-                        <TouchableOpacity><Trash2 size={18} color={Colors.red} /></TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleEdit(admin)}>
+                            <Edit size={18} color={Colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleDelete(admin)}>
+                            <Trash2 size={18} color={Colors.red} />
+                        </TouchableOpacity>
                     </View>
                 </View>
             ))}
+            {subAdmins.length === 0 && (
+                <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>No sub-admins created yet</Text>
+                </View>
+            )}
             <TouchableOpacity style={styles.saveButton} onPress={() => { setEditingAdmin(null); setModalView('addOrEdit'); }}>
                 <Text style={styles.saveButtonText}>Add New Sub-admin</Text>
             </TouchableOpacity>
@@ -101,54 +127,137 @@ const SubAdminContent = ({ setModalView, setEditingAdmin }: { setModalView: any,
     );
 }
 
-const AddSubAdminContent = ({ editingAdmin }: { editingAdmin: any }) => {
+const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminData | null, onSave: (data: any) => void }) => {
     const [formData, setFormData] = useState({
-        name: editingAdmin?.name || '',
-        phone: editingAdmin?.phone || '',
+        name: editingAdmin?.displayName || '',
+        phone: editingAdmin?.phoneNumber || '',
         email: editingAdmin?.email || '',
         password: '',
     });
-    const [permissions, setPermissions] = useState({
+    const [permissions, setPermissions] = useState<SubAdminPermissions>({
         orders: editingAdmin?.permissions?.orders || false,
         delivery: editingAdmin?.permissions?.delivery || false,
         products: editingAdmin?.permissions?.products || false,
     });
-    const togglePermission = (key: string) => setPermissions(prev => ({...prev, [key]: !prev[key]}));
+    const [isLoading, setIsLoading] = useState(false);
+
+    const togglePermission = (key: keyof SubAdminPermissions) => {
+        setPermissions(prev => ({...prev, [key]: !prev[key]}));
+    };
+
+    const handleSave = async () => {
+        if (!formData.name.trim() || !formData.email.trim()) {
+            Alert.alert('Error', 'Please fill in all required fields.');
+            return;
+        }
+
+        if (!editingAdmin && !formData.password.trim()) {
+            Alert.alert('Error', 'Password is required for new sub-admin.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            await onSave({
+                displayName: formData.name.trim(),
+                email: formData.email.trim(),
+                phoneNumber: formData.phone.trim(),
+                password: formData.password,
+                permissions,
+                isEdit: !!editingAdmin,
+                uid: editingAdmin?.uid,
+            });
+        } catch (error) {
+            console.error('Error saving sub-admin:', error);
+            Alert.alert('Error', 'An error occurred while saving.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <View>
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Name</Text>
-                <TextInput style={styles.input} value={formData.name} onChangeText={text => setFormData({...formData, name: text})} placeholder="Enter sub-admin name" />
+                <Text style={styles.inputLabel}>Name *</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.name} 
+                    onChangeText={text => setFormData({...formData, name: text})} 
+                    placeholder="Enter sub-admin name" 
+                />
             </View>
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Phone Number</Text>
-                <TextInput style={styles.input} value={formData.phone} onChangeText={text => setFormData({...formData, phone: text})} placeholder="Enter phone number" keyboardType="phone-pad" />
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.phone} 
+                    onChangeText={text => setFormData({...formData, phone: text})} 
+                    placeholder="Enter phone number" 
+                    keyboardType="phone-pad" 
+                />
             </View>
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Email</Text>
-                <TextInput style={styles.input} value={formData.email} onChangeText={text => setFormData({...formData, email: text})} placeholder="Enter email address" keyboardType="email-address" />
+                <Text style={styles.inputLabel}>Email *</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.email} 
+                    onChangeText={text => setFormData({...formData, email: text})} 
+                    placeholder="Enter email address" 
+                    keyboardType="email-address" 
+                    autoCapitalize="none"
+                    editable={!editingAdmin} // Don't allow email editing for existing users
+                />
             </View>
-            <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Password</Text>
-                <TextInput style={styles.input} value={formData.password} onChangeText={text => setFormData({...formData, password: text})} placeholder={editingAdmin ? "New password (optional)" : "Create a password"} secureTextEntry />
-            </View>
+            {!editingAdmin && (
+                <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Password *</Text>
+                    <TextInput 
+                        style={styles.input} 
+                        value={formData.password} 
+                        onChangeText={text => setFormData({...formData, password: text})} 
+                        placeholder="Create a password" 
+                        secureTextEntry 
+                    />
+                </View>
+            )}
+            
             <Text style={styles.modalSectionTitle}>Module Access</Text>
             <View style={styles.permissionRow}>
                 <Text style={styles.permissionLabel}>Orders Management</Text>
-                <Switch value={permissions.orders} onValueChange={() => togglePermission('orders')} trackColor={{false: Colors.border, true: Colors.primaryLight}} thumbColor={Colors.white} />
+                <Switch 
+                    value={permissions.orders} 
+                    onValueChange={() => togglePermission('orders')} 
+                    trackColor={{false: Colors.border, true: Colors.primaryLight}} 
+                    thumbColor={Colors.white} 
+                />
             </View>
             <View style={styles.permissionRow}>
                 <Text style={styles.permissionLabel}>Delivery Agent Management</Text>
-                <Switch value={permissions.delivery} onValueChange={() => togglePermission('delivery')} trackColor={{false: Colors.border, true: Colors.primaryLight}} thumbColor={Colors.white} />
+                <Switch 
+                    value={permissions.delivery} 
+                    onValueChange={() => togglePermission('delivery')} 
+                    trackColor={{false: Colors.border, true: Colors.primaryLight}} 
+                    thumbColor={Colors.white} 
+                />
             </View>
             <View style={styles.permissionRow}>
                 <Text style={styles.permissionLabel}>Product Management</Text>
-                <Switch value={permissions.products} onValueChange={() => togglePermission('products')} trackColor={{false: Colors.border, true: Colors.primaryLight}} thumbColor={Colors.white} />
+                <Switch 
+                    value={permissions.products} 
+                    onValueChange={() => togglePermission('products')} 
+                    trackColor={{false: Colors.border, true: Colors.primaryLight}} 
+                    thumbColor={Colors.white} 
+                />
             </View>
 
-            <TouchableOpacity style={styles.saveButton}>
-                <Text style={styles.saveButtonText}>{editingAdmin ? 'Update Sub-admin' : 'Create Sub-admin'}</Text>
+            <TouchableOpacity 
+                style={[styles.saveButton, isLoading && styles.saveButtonDisabled]} 
+                onPress={handleSave}
+                disabled={isLoading}
+            >
+                <Text style={styles.saveButtonText}>
+                    {isLoading ? 'Saving...' : (editingAdmin ? 'Update Sub-admin' : 'Create Sub-admin')}
+                </Text>
             </TouchableOpacity>
         </View>
     );
@@ -160,11 +269,89 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [modalView, setModalView] = useState('list');
-  const [editingAdmin, setEditingAdmin] = useState(null);
+  const [editingAdmin, setEditingAdmin] = useState<SubAdminData | null>(null);
+  const [subAdmins, setSubAdmins] = useState<SubAdminData[]>([]);
+  const [isLoadingSubAdmins, setIsLoadingSubAdmins] = useState(false);
+
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
+
+  // Load sub-admins when component mounts
+  useEffect(() => {
+    loadSubAdmins();
+  }, [userSession]);
+
+  const loadSubAdmins = async () => {
+    if (!userSession?.uid) return;
+    
+    setIsLoadingSubAdmins(true);
+    try {
+      const adminSubAdmins = await subAdminService.getSubAdminsByAdmin(userSession.uid);
+      setSubAdmins(adminSubAdmins);
+    } catch (error) {
+      console.error('Error loading sub-admins:', error);
+      Alert.alert('Error', 'Failed to load sub-admins.');
+    } finally {
+      setIsLoadingSubAdmins(false);
+    }
+  };
+
+  const handleSaveSubAdmin = async (data: any) => {
+    if (!userSession?.uid || !userSession?.email) {
+      return;
+    }
+
+    try {
+      if (data.isEdit) {
+        // Update existing sub-admin
+        await subAdminService.updateSubAdminPermissions(data.uid, data.permissions);
+        if (data.displayName !== editingAdmin?.displayName || data.phoneNumber !== editingAdmin?.phoneNumber) {
+          await subAdminService.updateSubAdminProfile(data.uid, {
+            displayName: data.displayName,
+            phoneNumber: data.phoneNumber,
+          });
+        }
+        Alert.alert('Success', 'Sub-admin updated successfully!');
+      } else {
+        // Create new sub-admin
+        await subAdminService.createSubAdmin(
+          userSession.uid,
+          {
+            email: data.email,
+            password: data.password,
+            displayName: data.displayName,
+            phoneNumber: data.phoneNumber,
+            permissions: data.permissions,
+          }
+        );
+        Alert.alert('Success', 'Sub-admin created successfully!');
+      }
+      
+      // Reload sub-admins and close modal (for edit case)
+      await loadSubAdmins();
+      setModalVisible(false);
+      setModalView('list');
+      setEditingAdmin(null);
+    } catch (error) {
+      console.error('Error saving sub-admin:', error);
+      Alert.alert('Error', 'Failed to save sub-admin. Please try again.');
+    }
+  };
+
+  const handleDeleteSubAdmin = async (uid: string) => {
+    try {
+      await subAdminService.deactivateSubAdmin(uid);
+      Alert.alert('Success', 'Sub-admin deleted successfully!');
+      await loadSubAdmins();
+    } catch (error) {
+      console.error('Error deleting sub-admin:', error);
+      Alert.alert('Error', 'Failed to delete sub-admin. Please try again.');
+    }
+  };
+
+
 
   const handleLogout = async () => {
     Alert.alert(
@@ -199,7 +386,10 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const menuItems = [
     { id: '1', title: 'Edit Profile', icon: User, action: () => openModal('editProfile') },
     { id: '2', title: 'Change Password', icon: Lock, action: () => openModal('changePassword') },
-    { id: '3', title: 'Sub-admin Management', icon: Users, action: () => openModal('subAdmin') },
+    // Only show sub-admin management for full admins, not sub-admins
+    ...(userSession?.role === 'admin' ? [
+      { id: '3', title: 'Sub-admin Management', icon: Users, action: () => openModal('subAdmin') }
+    ] : []),
   ];
 
   if (!fontsLoaded) {
@@ -211,7 +401,17 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
           case 'editProfile': return <EditProfileContent user={userSession} />;
           case 'changePassword': return <ChangePasswordContent />;
           case 'subAdmin': 
-            return modalView === 'list' ? <SubAdminContent setModalView={setModalView} setEditingAdmin={setEditingAdmin} /> : <AddSubAdminContent editingAdmin={editingAdmin} />;
+            return modalView === 'list' ? 
+              <SubAdminContent 
+                setModalView={setModalView} 
+                setEditingAdmin={setEditingAdmin} 
+                subAdmins={subAdmins}
+                onDeleteSubAdmin={handleDeleteSubAdmin}
+              /> : 
+              <AddSubAdminContent 
+                editingAdmin={editingAdmin} 
+                onSave={handleSaveSubAdmin}
+              />;
           default: return null;
       }
   }
@@ -305,6 +505,8 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
             </View>
         </View>
       </Modal>
+
+
     </View>
   );
 }
@@ -507,6 +709,20 @@ const styles = StyleSheet.create({
       fontSize: 16,
       fontFamily: 'Inter_500Medium',
       color: Colors.text,
-  }
+  },
+  saveButtonDisabled: {
+    backgroundColor: Colors.textSecondary,
+    opacity: 0.6,
+  },
+  emptyState: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
 });
 

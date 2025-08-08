@@ -16,8 +16,8 @@ export const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ childr
       if (!isAuthenticated || !userSession) {
         // User is not authenticated, redirect to auth screen
         router.replace('/');
-      } else if (userSession.role !== 'admin') {
-        // User is authenticated but not an admin, redirect based on role
+      } else if (userSession.role !== 'admin' && userSession.role !== 'sub-admin') {
+        // User is authenticated but not an admin or sub-admin, redirect based on role
         if (userSession.role === 'delivery') {
           router.replace('/delivery/deliverydashboard');
         } else {
@@ -36,8 +36,8 @@ export const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ childr
     );
   }
 
-  // Don't render children if not authenticated or not admin
-  if (!isAuthenticated || !userSession || userSession.role !== 'admin') {
+  // Don't render children if not authenticated or not admin/sub-admin
+  if (!isAuthenticated || !userSession || (userSession.role !== 'admin' && userSession.role !== 'sub-admin')) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#0D47A1" />
@@ -45,7 +45,7 @@ export const AdminProtectedRoute: React.FC<AdminProtectedRouteProps> = ({ childr
     );
   }
 
-  // Render children if authenticated and admin
+  // Render children if authenticated and admin or sub-admin
   return <>{children}</>;
 };
 

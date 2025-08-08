@@ -6,10 +6,25 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { Tabs } from 'expo-router';
 import { BarChart2, ClipboardList, Package, Truck, User } from 'lucide-react-native';
 import { Platform } from 'react-native';
+import { useAuth } from '../../core/auth/AuthContext';
 import { AdminProtectedRoute } from '../../core/auth/AdminProtectedRoute';
 
 export default function AdminTabLayout() {
   const colorScheme = useColorScheme();
+  const { userSession, isLoading } = useAuth();
+  
+  // Don't render until we have a valid session
+  if (isLoading || !userSession) {
+    return null;
+  }
+  
+  // Check if user is sub-admin and has specific permissions
+  const isSubAdmin = userSession?.role === 'sub-admin';
+  const hasPermission = (permission: string) => {
+    if (!isSubAdmin) return true; // Full admin has all permissions
+    if (!userSession?.permissions) return false;
+    return userSession.permissions[permission as keyof typeof userSession.permissions] === true;
+  };
 
   return (
     <AdminProtectedRoute>
@@ -40,6 +55,7 @@ export default function AdminTabLayout() {
             tabBarIcon: ({ color, focused }) => (
               <BarChart2 size={24} color={focused ? color : color} fill="transparent" />
             ),
+            href: userSession?.role === 'admin' ? '/admin/admindashboard' : null,
           }}
         />
         <Tabs.Screen
@@ -49,6 +65,7 @@ export default function AdminTabLayout() {
             tabBarIcon: ({ color, focused }) => (
               <ClipboardList size={24} color={focused ? color : color} fill="transparent" />
             ),
+            href: hasPermission('orders') ? '/admin/adminordersmanagement' : null,
           }}
         />
         <Tabs.Screen
@@ -58,6 +75,7 @@ export default function AdminTabLayout() {
             tabBarIcon: ({ color, focused }) => (
               <Package size={24} color={focused ? color : color} fill="transparent" />
             ),
+            href: hasPermission('products') ? '/admin/adminproductmanagement' : null,
           }}
         />
         <Tabs.Screen
@@ -67,6 +85,7 @@ export default function AdminTabLayout() {
             tabBarIcon: ({ color, focused }) => (
               <Truck size={24} color={focused ? color : color} fill="transparent" />
             ),
+            href: hasPermission('delivery') ? '/admin/admindeliverymanagement' : null,
           }}
         />
         <Tabs.Screen

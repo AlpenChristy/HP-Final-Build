@@ -10,6 +10,11 @@ export interface UserSession {
   sessionToken: string;
   loginTime: number;
   expiresAt?: number;
+  permissions?: {
+    orders?: boolean;
+    delivery?: boolean;
+    products?: boolean;
+  };
 }
 
 export class SessionManager {

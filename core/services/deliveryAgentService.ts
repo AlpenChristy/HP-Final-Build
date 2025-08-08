@@ -27,25 +27,15 @@ export const deliveryAgentService = {
     email: string;
     phone: string;
     password: string;
-  }, adminCredentials?: { email: string; password: string }): Promise<DeliveryAgent> {
+  }): Promise<DeliveryAgent> {
     try {
-      // Store current admin user info
-      const currentUser = FIREBASE_AUTH.currentUser;
-      const adminEmail = currentUser?.email;
-      
-      // Create Firebase Auth user for delivery agent
-      const userCredential = await createUserWithEmailAndPassword(
-        FIREBASE_AUTH,
-        agentData.email,
-        agentData.password
-      );
-      
-      const uid = userCredential.user.uid;
+      // Generate a unique ID for the delivery agent
+      const agentId = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const timestamp = Date.now();
 
       // Create delivery agent data
       const deliveryAgent: DeliveryAgent = {
-        uid,
+        uid: agentId,
         name: agentData.name,
         email: agentData.email,
         phone: agentData.phone,
@@ -58,43 +48,26 @@ export const deliveryAgentService = {
         updatedAt: timestamp,
       };
 
-      // Store in users collection with role 'delivery'
-      await userService.createUser({
-        uid,
-        email: agentData.email,
-        displayName: agentData.name,
-        role: 'delivery',
-        phoneNumber: agentData.phone,
-      });
-
-      // Store in delivery_agents collection for admin management
-      const agentRef = doc(FIREBASE_DB, 'delivery_agents', uid);
+      // Store in delivery_agents collection
+      const agentRef = doc(FIREBASE_DB, 'delivery_agents', agentId);
       await setDoc(agentRef, deliveryAgent);
 
-      // Sign out the newly created delivery agent
-      await signOut(FIREBASE_AUTH);
+      // Store credentials in delivery_credentials collection for authentication
+      const credentialsRef = doc(FIREBASE_DB, 'delivery_credentials', agentId);
+      await setDoc(credentialsRef, {
+        uid: agentId,
+        email: agentData.email,
+        password: agentData.password, // In production, hash this password
+        createdAt: timestamp,
+      });
 
-      // If admin credentials are provided, sign the admin back in
-      if (adminCredentials && adminEmail) {
-        try {
-          await signInWithEmailAndPassword(FIREBASE_AUTH, adminCredentials.email, adminCredentials.password);
-        } catch (adminSignInError) {
-          console.warn('Could not restore admin session:', adminSignInError);
-          // The delivery agent was created successfully, but admin needs to log back in
-        }
-      }
-
-      return { ...deliveryAgent, id: uid };
+      return { ...deliveryAgent, id: agentId };
     } catch (error: any) {
       console.error('Error creating delivery agent:', error);
       
-      // Handle specific Firebase Auth errors
-      if (error.code === 'auth/email-already-in-use') {
-        throw new Error('Email is already registered');
-      } else if (error.code === 'auth/weak-password') {
-        throw new Error('Password should be at least 6 characters');
-      } else if (error.code === 'auth/invalid-email') {
-        throw new Error('Invalid email address');
+      // Handle specific errors
+      if (error.code === 'permission-denied') {
+        throw new Error('Permission denied. Please check your admin privileges.');
       }
       
       throw new Error('Failed to create delivery agent');

@@ -65,8 +65,12 @@ export default function AdminDashboardScreen() {
         colors={[Colors.primaryLight, Colors.primary]}
         style={[styles.header, { paddingTop: insets.top + 10 }]}
       >
-        <Text style={styles.headerTitle}>Admin Dashboard</Text>
-        <Text style={styles.headerSubtitle}>Welcome, {userSession?.displayName || 'Admin'}!</Text>
+        <Text style={styles.headerTitle}>
+          {userSession?.role === 'sub-admin' ? 'Sub-Admin Dashboard' : 'Admin Dashboard'}
+        </Text>
+        <Text style={styles.headerSubtitle}>
+          Welcome, {userSession?.displayName || (userSession?.role === 'sub-admin' ? 'Sub-Admin' : 'Admin')}!
+        </Text>
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.content}>

@@ -1,6 +1,7 @@
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { FIREBASE_AUTH } from '../firebase/firebase';
+import { subAdminService } from '../services/subAdminService';
 import { userService } from '../services/userService';
 import { SessionManager, UserSession } from '../session/sessionManager';
 
@@ -61,7 +62,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // This happens when user logs in or when app restarts with authenticated user
         try {
           const userData = await userService.getUserById(firebaseUser.uid);
+          
           if (userData) {
+            let permissions = undefined;
+            
+            // If user is a sub-admin, get their permissions
+            if (userData.role === 'sub-admin') {
+              const subAdminData = await subAdminService.getSubAdminById(firebaseUser.uid);
+              if (subAdminData) {
+                permissions = subAdminData.permissions;
+              }
+            }
+            
             const newSession: UserSession = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || userData.email,
@@ -69,6 +81,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               role: userData.role || 'customer',
               sessionToken: SessionManager.generateSessionToken(),
               loginTime: Date.now(),
+              permissions,
             };
             
             await SessionManager.saveSession(newSession);

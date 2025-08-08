@@ -1,25 +1,41 @@
 // Updated file: app/index.tsx
 import { router } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useAuth } from '../core/auth/AuthContext';
 import AuthScreen from './auth/auth';
 
 export default function Index() {
   const { isAuthenticated, isLoading, userSession } = useAuth();
+  const [hasNavigated, setHasNavigated] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated && userSession) {
-      // Redirect based on user role
-      if (userSession.role === 'admin') {
-        router.replace('/admin/admindashboard');
-      } else if (userSession.role === 'delivery') {
-        router.replace('/delivery/deliverydashboard');
-      } else {
-        router.replace('/customer/home');
-      }
+    if (isLoading || hasNavigated) return;
+    
+    if (isAuthenticated && userSession) {
+      const navigate = () => {
+        setHasNavigated(true);
+        
+        try {
+          // Redirect based on user role
+          if (userSession.role === 'admin' || userSession.role === 'sub-admin') {
+            router.replace('/admin');
+          } else if (userSession.role === 'delivery') {
+            router.replace('/delivery/deliverydashboard');
+          } else {
+            router.replace('/customer/home');
+          }
+        } catch (error) {
+          console.error('Navigation error:', error);
+          setHasNavigated(false);
+        }
+      };
+
+      // Add a small delay to ensure proper navigation
+      const timer = setTimeout(navigate, 50);
+      return () => clearTimeout(timer);
     }
-  }, [isAuthenticated, isLoading, userSession]);
+  }, [isAuthenticated, isLoading, userSession, hasNavigated]);
 
   // Show loading spinner while checking authentication
   if (isLoading) {

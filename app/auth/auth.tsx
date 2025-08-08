@@ -19,6 +19,8 @@ import { useAuth } from '../../core/auth/AuthContext';
 import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 
 import { userService } from '../../core/services/userService';
+import { subAdminService } from '../../core/services/subAdminService';
+import { deliveryAuthService } from '../../core/services/deliveryAuthService';
 import { SessionManager, UserSession } from '../../core/session/sessionManager';
 
 // Get screen dimensions for responsive design
@@ -80,11 +82,39 @@ export default function AuthScreen() {
     let userData;
 
     if (isLogin) {
-      // Login with Firebase
-      userCredential = await signInWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
-      
-      // Get user data from Firestore
-      userData = await userService.getUserById(userCredential.user.uid);
+      try {
+        // First try Firebase Auth login
+        userCredential = await signInWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
+        
+        // Get user data from Firestore
+        userData = await userService.getUserById(userCredential.user.uid);
+      } catch (firebaseError: any) {
+        // If Firebase Auth fails, try delivery agent authentication
+        console.log('Firebase Auth failed, trying delivery agent auth...');
+        
+        try {
+          const deliverySession = await deliveryAuthService.authenticateDeliveryAgent(formData.email, formData.password);
+          
+          if (deliverySession) {
+            // Use the auth context to handle login
+            await login(deliverySession);
+            
+            Alert.alert('Success', 'Login successful!');
+            
+            // Redirect to delivery dashboard
+            setTimeout(() => {
+              router.replace('/delivery/deliverydashboard');
+            }, 300);
+            
+            return; // Exit early for delivery agent login
+          }
+        } catch (deliveryError) {
+          console.log('Delivery auth also failed');
+        }
+        
+        // If both Firebase Auth and delivery auth fail, throw the original Firebase error
+        throw firebaseError;
+      }
     } else {
       // Register with Firebase
       userCredential = await createUserWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
@@ -107,6 +137,15 @@ export default function AuthScreen() {
       userData = await userService.getUserById(userCredential.user.uid);
     }
 
+    // Get permissions if user is a sub-admin
+    let permissions = undefined;
+    if (userData?.role === 'sub-admin') {
+      const subAdminData = await subAdminService.getSubAdminById(userCredential.user.uid);
+      if (subAdminData) {
+        permissions = subAdminData.permissions;
+      }
+    }
+
     // Create and save session after successful authentication
     const userSession: UserSession = {
       uid: userCredential.user.uid,
@@ -115,6 +154,7 @@ export default function AuthScreen() {
       role: userData?.role || 'customer', // Use role from Firestore
       sessionToken: SessionManager.generateSessionToken(),
       loginTime: Date.now(),
+      permissions,
     };
 
     // Use the auth context to handle login
@@ -124,15 +164,19 @@ export default function AuthScreen() {
 
     // Add a slight delay before navigation to ensure session is saved
     setTimeout(() => {
-      // Redirect based on role
-      if (userSession.role === 'admin') {
-        router.replace('/admin/admindashboard');
-      } else if (userSession.role === 'delivery') {
-        router.replace('/delivery/deliverydashboard');
-      } else {
-        router.replace('/customer/home');
+      try {
+        // Redirect based on role
+        if (userSession.role === 'admin' || userSession.role === 'sub-admin') {
+          router.replace('/admin');
+        } else if (userSession.role === 'delivery') {
+          router.replace('/delivery/deliverydashboard');
+        } else {
+          router.replace('/customer/home');
+        }
+      } catch (error) {
+        console.error('Navigation error after auth:', error);
       }
-    }, 500);
+    }, 300);
   } catch (error: any) {
     console.error('Authentication error:', error);
     Alert.alert(

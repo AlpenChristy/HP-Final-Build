@@ -41,9 +41,7 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
     email: '',
     password: '',
   });
-  const [adminPasswordModalVisible, setAdminPasswordModalVisible] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
-  const [pendingAgentData, setPendingAgentData] = useState<any>(null);
+
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
@@ -96,48 +94,12 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
   const closeModals = () => {
     setEditModalVisible(false);
     setDetailsModalVisible(false);
-    setAdminPasswordModalVisible(false);
     setAgentToEdit(null);
     setViewingAgent(null);
-    setPendingAgentData(null);
-    setAdminPassword('');
+    setFormData({ name: '', phone: '', email: '', password: '' });
   };
 
-  const handleCreateAgentWithPassword = async () => {
-    if (!adminPassword.trim()) {
-      Alert.alert('Error', 'Please enter your admin password');
-      return;
-    }
 
-    if (!pendingAgentData || !userSession?.email) {
-      Alert.alert('Error', 'Missing required information');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      
-      // Create new agent with admin credentials
-      await deliveryAgentService.createDeliveryAgent(
-        pendingAgentData,
-        {
-          email: userSession.email,
-          password: adminPassword,
-        }
-      );
-      
-      Alert.alert('Success', 'Delivery agent created successfully');
-      
-      // Reload agents list
-      await loadDeliveryAgents();
-      closeModals();
-    } catch (error: any) {
-      console.error('Error creating agent:', error);
-      Alert.alert('Error', error.message || 'Failed to create delivery agent');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleSave = async () => {
     // Validate form data
@@ -163,18 +125,14 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
         });
         Alert.alert('Success', 'Delivery agent updated successfully');
       } else {
-        // For new agents, we need admin password to restore session
-        const agentData = {
+        // Create new agent
+        await deliveryAgentService.createDeliveryAgent({
           name: formData.name.trim(),
           email: formData.email.trim(),
           phone: formData.phone.trim(),
           password: formData.password,
-        };
-        
-        setPendingAgentData(agentData);
-        setAdminPasswordModalVisible(true);
-        setSaving(false);
-        return;
+        });
+        Alert.alert('Success', 'Delivery agent created successfully');
       }
 
       // Reload agents list
@@ -377,56 +335,7 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
         </View>
       </Modal>
 
-      {/* Admin Password Confirmation Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={adminPasswordModalVisible}
-        onRequestClose={closeModals}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, {paddingBottom: insets.bottom}]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Confirm Admin Password</Text>
-              <TouchableOpacity onPress={closeModals}>
-                <X size={24} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalForm}>
-              <Text style={styles.passwordNote}>
-                Creating a delivery agent will temporarily sign you out. Please enter your admin password to restore your session.
-              </Text>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Admin Password</Text>
-                <TextInput 
-                  style={styles.input} 
-                  value={adminPassword} 
-                  onChangeText={setAdminPassword} 
-                  placeholder="Enter your admin password" 
-                  secureTextEntry 
-                  autoFocus
-                />
-              </View>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity style={styles.cancelButton} onPress={closeModals}>
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.saveButton, saving && styles.disabledButton]} 
-                  onPress={handleCreateAgentWithPassword}
-                  disabled={saving}
-                >
-                  {saving ? (
-                    <ActivityIndicator size="small" color={Colors.white} />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Create Agent</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
+
     </View>
   );
 }
@@ -591,12 +500,12 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
   },
   saveButton: {
-    flex: 1,
-    backgroundColor: Colors.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
+  backgroundColor: Colors.primary,
+  paddingVertical: 14, // smaller padding
+  borderRadius: 12,
+  alignItems: 'center',
+  justifyContent: 'center', // ensure text stays centered
+},
   saveButtonText: {
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
