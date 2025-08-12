@@ -17,4 +17,4 @@ const FIREBASE_APP = initializeApp(firebaseConfig);
 const FIREBASE_AUTH = getAuth(FIREBASE_APP);
 const FIREBASE_DB = getFirestore(FIREBASE_APP);
 
-export { FIREBASE_APP, FIREBASE_AUTH, FIREBASE_DB };
+export { FIREBASE_APP, FIREBASE_AUTH, FIREBASE_DB, firebaseConfig };

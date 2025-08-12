@@ -342,8 +342,8 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
 
   const handleDeleteSubAdmin = async (uid: string) => {
     try {
-      await subAdminService.deactivateSubAdmin(uid);
-      Alert.alert('Success', 'Sub-admin deleted successfully!');
+      await subAdminService.deleteSubAdmin(uid);
+      Alert.alert('Success', 'Sub-admin permanently deleted.');
       await loadSubAdmins();
     } catch (error) {
       console.error('Error deleting sub-admin:', error);

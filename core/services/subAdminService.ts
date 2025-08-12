@@ -1,8 +1,13 @@
 // File: core/services/subAdminService.ts
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { collection, deleteDoc, doc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
-import { FIREBASE_AUTH, FIREBASE_DB } from '../firebase/firebase';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword, deleteUser } from 'firebase/auth';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { FIREBASE_AUTH, FIREBASE_DB, firebaseConfig } from '../firebase/firebase';
 import { userService } from './userService';
+
+// Use secondary app to create sub-admin auth users without affecting current admin session
+const secondaryApp = initializeApp(firebaseConfig, 'Secondary-SubAdmin');
+const secondaryAuth = getAuth(secondaryApp);
 
 // Sub-admin permissions interface
 export interface SubAdminPermissions {
@@ -37,52 +42,45 @@ export const subAdminService = {
       permissions: SubAdminPermissions;
     }
   ): Promise<string> {
-    // For now, we'll create the sub-admin record without Firebase Auth
-    // This prevents the admin from being signed out
-    // The sub-admin can register themselves later using their credentials
-    
     try {
-      // Generate a unique ID for the sub-admin
-      const subAdminId = `subadmin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const timestamp = Date.now();
 
-      // Create sub-admin specific document
-      const subAdminDoc: SubAdminData = {
-        uid: subAdminId,
+      // 1) Create Firebase Auth user via secondary instance (prevents admin sign-out)
+      const { user } = await createUserWithEmailAndPassword(
+        secondaryAuth,
+        subAdminData.email,
+        subAdminData.password
+      );
+
+      // 2) Create user doc in unified users collection
+      await userService.createUser({
+        uid: user.uid,
         email: subAdminData.email,
         displayName: subAdminData.displayName,
         phoneNumber: subAdminData.phoneNumber,
         role: 'sub-admin',
-        permissions: subAdminData.permissions,
-        createdBy: adminUid,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        isActive: true,
-      };
-
-      // Store in subAdmins collection
-      await setDoc(doc(FIREBASE_DB, 'subAdmins', subAdminId), subAdminDoc);
-
-      // Store credentials for later registration (when sub-admin first logs in)
-      const credentialsRef = doc(FIREBASE_DB, 'pending_registrations', subAdminId);
-      await setDoc(credentialsRef, {
-        email: subAdminData.email,
-        password: subAdminData.password, // In production, hash this password
-        displayName: subAdminData.displayName,
-        phoneNumber: subAdminData.phoneNumber,
-        role: 'sub-admin',
-        permissions: subAdminData.permissions,
-        createdBy: adminUid,
-        createdAt: timestamp,
-        registrationComplete: false,
       });
 
-      return subAdminId;
+      // 3) Add sub-admin specific fields on the same users doc
+      const userRef = doc(FIREBASE_DB, 'users', user.uid);
+      await updateDoc(userRef, {
+        permissions: subAdminData.permissions,
+        isActive: true,
+        createdBy: adminUid,
+        // Optionally retain password field to match existing flows; safe practice is to REMOVE or hash
+        password: subAdminData.password,
+        updatedAt: timestamp,
+      });
+
+      // 4) Sign out secondary auth to clean up
+      await signOut(secondaryAuth);
+
+      return user.uid;
     } catch (error) {
       console.error('Error creating sub-admin:', error);
       
       // Handle specific errors
-      if (error.code === 'permission-denied') {
+      if ((error as any).code === 'permission-denied') {
         throw new Error('Permission denied. Please check your admin privileges.');
       }
       
@@ -94,7 +92,8 @@ export const subAdminService = {
   async getSubAdminsByAdmin(adminUid: string): Promise<SubAdminData[]> {
     try {
       const q = query(
-        collection(FIREBASE_DB, 'subAdmins'),
+        collection(FIREBASE_DB, 'users'),
+        where('role', '==', 'sub-admin'),
         where('createdBy', '==', adminUid),
         where('isActive', '==', true)
       );
@@ -103,7 +102,19 @@ export const subAdminService = {
       const subAdmins: SubAdminData[] = [];
       
       querySnapshot.forEach((doc) => {
-        subAdmins.push(doc.data() as SubAdminData);
+        const d = doc.data() as any;
+        subAdmins.push({
+          uid: doc.id,
+          email: d.email,
+          displayName: d.displayName,
+          phoneNumber: d.phoneNumber,
+          role: 'sub-admin',
+          permissions: d.permissions,
+          createdBy: d.createdBy,
+          createdAt: d.createdAt,
+          updatedAt: d.updatedAt,
+          isActive: d.isActive,
+        });
       });
       
       return subAdmins;
@@ -116,16 +127,23 @@ export const subAdminService = {
   // Get sub-admin data by UID
   async getSubAdminById(uid: string): Promise<SubAdminData | null> {
     try {
-      const subAdminDoc = await getDocs(query(
-        collection(FIREBASE_DB, 'subAdmins'), 
-        where('uid', '==', uid),
-        where('isActive', '==', true)
-      ));
-      
-      if (!subAdminDoc.empty) {
-        return subAdminDoc.docs[0].data() as SubAdminData;
-      }
-      return null;
+      const docSnapRef = doc(FIREBASE_DB, 'users', uid);
+      const snap = await getDoc(docSnapRef);
+      if (!snap.exists()) return null;
+      const d = snap.data() as any;
+      if (d.role !== 'sub-admin' || d.isActive === false) return null;
+      return {
+        uid: uid,
+        email: d.email,
+        displayName: d.displayName,
+        phoneNumber: d.phoneNumber,
+        role: 'sub-admin',
+        permissions: d.permissions,
+        createdBy: d.createdBy,
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt,
+        isActive: d.isActive,
+      };
     } catch (error) {
       console.error('Error getting sub-admin:', error);
       return null;
@@ -138,7 +156,7 @@ export const subAdminService = {
     permissions: SubAdminPermissions
   ): Promise<void> {
     try {
-      const subAdminRef = doc(FIREBASE_DB, 'subAdmins', uid);
+      const subAdminRef = doc(FIREBASE_DB, 'users', uid);
       await updateDoc(subAdminRef, {
         permissions,
         updatedAt: Date.now(),
@@ -158,15 +176,8 @@ export const subAdminService = {
     }
   ): Promise<void> {
     try {
-      // Update in users collection
-      await userService.updateUser(uid, profileData);
-      
-      // Update in subAdmins collection
-      const subAdminRef = doc(FIREBASE_DB, 'subAdmins', uid);
-      await updateDoc(subAdminRef, {
-        ...profileData,
-        updatedAt: Date.now(),
-      });
+      // Update in users collection only
+      await userService.updateUser(uid, { ...profileData });
     } catch (error) {
       console.error('Error updating sub-admin profile:', error);
       throw error;
@@ -176,11 +187,8 @@ export const subAdminService = {
   // Deactivate sub-admin (soft delete)
   async deactivateSubAdmin(uid: string): Promise<void> {
     try {
-      const subAdminRef = doc(FIREBASE_DB, 'subAdmins', uid);
-      await updateDoc(subAdminRef, {
-        isActive: false,
-        updatedAt: Date.now(),
-      });
+      const subAdminRef = doc(FIREBASE_DB, 'users', uid);
+      await updateDoc(subAdminRef, { isActive: false, updatedAt: Date.now() });
     } catch (error) {
       console.error('Error deactivating sub-admin:', error);
       throw error;
@@ -190,12 +198,30 @@ export const subAdminService = {
   // Delete sub-admin permanently
   async deleteSubAdmin(uid: string): Promise<void> {
     try {
-      // Delete from subAdmins collection
-      await deleteDoc(doc(FIREBASE_DB, 'subAdmins', uid));
-      
-      // Note: We don't delete from users collection to maintain data integrity
-      // Instead, we could update the role or mark as deleted
-      await userService.updateUser(uid, { role: 'deleted' });
+      const userRef = doc(FIREBASE_DB, 'users', uid);
+      const snap = await getDoc(userRef);
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        const email = data.email;
+        const password = data.password; // per existing flow
+
+        // Try to delete Auth user by signing in on secondary auth
+        if (email && password) {
+          try {
+            await signInWithEmailAndPassword(secondaryAuth, email, password);
+            if (secondaryAuth.currentUser) {
+              await deleteUser(secondaryAuth.currentUser);
+            }
+          } catch (authErr) {
+            console.warn('Warning: Failed to delete Firebase Auth user for sub-admin:', authErr);
+          } finally {
+            try { await signOut(secondaryAuth); } catch {}
+          }
+        }
+      }
+
+      // Delete Firestore user document
+      await deleteDoc(userRef);
     } catch (error) {
       console.error('Error deleting sub-admin:', error);
       throw error;
@@ -211,7 +237,6 @@ export const subAdminService = {
   getAllowedScreens(permissions: SubAdminPermissions): string[] {
     const allowedScreens: string[] = [];
     
-    if (permissions.dashboard) allowedScreens.push('dashboard');
     if (permissions.orders) allowedScreens.push('orders');
     if (permissions.products) allowedScreens.push('products');
     if (permissions.delivery) allowedScreens.push('delivery');

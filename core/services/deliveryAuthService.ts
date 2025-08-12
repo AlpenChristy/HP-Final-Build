@@ -1,5 +1,5 @@
 // File: core/services/deliveryAuthService.ts
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { FIREBASE_DB } from '../firebase/firebase';
 import { SessionManager, UserSession } from '../session/sessionManager';
 
@@ -7,46 +7,37 @@ export const deliveryAuthService = {
   // Authenticate delivery agent with email and password
   async authenticateDeliveryAgent(email: string, password: string): Promise<UserSession | null> {
     try {
-      // Query delivery credentials
-      const credentialsQuery = query(
-        collection(FIREBASE_DB, 'delivery_credentials'),
-        where('email', '==', email)
+      // Query the unified users collection for delivery role
+      const usersQuery = query(
+        collection(FIREBASE_DB, 'users'),
+        where('email', '==', email),
+        where('role', '==', 'delivery')
       );
-      
-      const credentialsSnapshot = await getDocs(credentialsQuery);
-      
-      if (credentialsSnapshot.empty) {
+
+      const usersSnapshot = await getDocs(usersQuery);
+
+      if (usersSnapshot.empty) {
         throw new Error('Invalid email or password');
       }
 
-      const credentialDoc = credentialsSnapshot.docs[0];
-      const credentials = credentialDoc.data();
+      const userDoc = usersSnapshot.docs[0];
+      const userData = userDoc.data() as any;
 
-      // Check password (in production, this should be hashed comparison)
-      if (credentials.password !== password) {
+      // Check password (NOTE: plaintext per existing flow; should be hashed in production)
+      if (userData.password !== password) {
         throw new Error('Invalid email or password');
       }
-
-      // Get delivery agent details
-      const agentRef = doc(FIREBASE_DB, 'delivery_agents', credentials.uid);
-      const agentDoc = await getDoc(agentRef);
-
-      if (!agentDoc.exists()) {
-        throw new Error('Delivery agent not found');
-      }
-
-      const agentData = agentDoc.data();
 
       // Check if agent is active
-      if (!agentData.isActive) {
+      if (userData.isActive === false) {
         throw new Error('Your account has been deactivated. Please contact admin.');
       }
 
       // Create user session
       const userSession: UserSession = {
-        uid: credentials.uid,
-        email: credentials.email,
-        displayName: agentData.name,
+        uid: userDoc.id,
+        email: userData.email,
+        displayName: userData.displayName,
         role: 'delivery',
         sessionToken: SessionManager.generateSessionToken(),
         loginTime: Date.now(),
@@ -63,13 +54,14 @@ export const deliveryAuthService = {
   // Check if email exists in delivery credentials
   async checkEmailExists(email: string): Promise<boolean> {
     try {
-      const credentialsQuery = query(
-        collection(FIREBASE_DB, 'delivery_credentials'),
-        where('email', '==', email)
+      const usersQuery = query(
+        collection(FIREBASE_DB, 'users'),
+        where('email', '==', email),
+        where('role', '==', 'delivery')
       );
-      
-      const credentialsSnapshot = await getDocs(credentialsQuery);
-      return !credentialsSnapshot.empty;
+
+      const usersSnapshot = await getDocs(usersQuery);
+      return !usersSnapshot.empty;
     } catch (error) {
       console.error('Error checking email:', error);
       return false;
