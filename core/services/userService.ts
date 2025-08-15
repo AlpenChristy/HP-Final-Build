@@ -9,6 +9,7 @@ export interface UserData {
   displayName: string;
   role: string;
   phoneNumber?: string;
+  address?: string;
   createdAt: number;
   updatedAt: number;
 }

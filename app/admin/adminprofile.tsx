@@ -1,12 +1,13 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ArrowLeft, ChevronRight, Edit, Lock, LogOut, Trash2, User, Users, X } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, Edit, Lock, LogOut, Tag, Trash2, User, Users, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
-import { subAdminService, SubAdminData, SubAdminPermissions } from '../../core/services/subAdminService';
+import { PromocodeData, promocodeService } from '../../core/services/promocodeService';
+import { SubAdminData, SubAdminPermissions, subAdminService } from '../../core/services/subAdminService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -99,7 +100,6 @@ const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSub
                         <Text style={styles.subAdminName}>{admin.displayName}</Text>
                         <Text style={styles.subAdminEmail}>{admin.email}</Text>
                         <View style={styles.permissionTags}>
-                            {admin.permissions.dashboard && <Text style={styles.permissionTag}>Dashboard</Text>}
                             {admin.permissions.orders && <Text style={styles.permissionTag}>Orders</Text>}
                             {admin.permissions.delivery && <Text style={styles.permissionTag}>Delivery</Text>}
                             {admin.permissions.products && <Text style={styles.permissionTag}>Products</Text>}
@@ -126,6 +126,333 @@ const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSub
         </View>
     );
 }
+
+
+
+// --- Promocode Components ---
+const PromocodeContent = ({ setModalView, setEditingPromocode, promocodes, onDeletePromocode }: { 
+    setModalView: any, 
+    setEditingPromocode: any,
+    promocodes: PromocodeData[],
+    onDeletePromocode: (id: string) => void
+}) => {
+    const handleEdit = (promocode: PromocodeData) => {
+        console.log('Editing promocode:', promocode); // Debug log
+        console.log('Promocode ID:', promocode.id); // Debug log
+        
+        if (!promocode.id) {
+            console.error('Promocode has no ID:', promocode);
+            Alert.alert('Error', 'Cannot edit promocode: missing ID');
+            return;
+        }
+        
+        setEditingPromocode(promocode);
+        setModalView('addOrEdit');
+    }
+
+    const handleDelete = (promocode: PromocodeData) => {
+        Alert.alert(
+            'Delete Promocode',
+            `Are you sure you want to delete ${promocode.code}? This action cannot be undone.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => onDeletePromocode(promocode.id),
+                },
+            ]
+        );
+    };
+
+    const formatDate = (date: Date) => {
+        return new Date(date).toLocaleDateString();
+    };
+
+    const getDiscountText = (promocode: PromocodeData) => {
+        if (promocode.discountType === 'percentage') {
+            return `${promocode.discountValue}% off`;
+        } else {
+            return `$${promocode.discountValue} off`;
+        }
+    };
+
+    console.log('Rendering promocodes:', promocodes); // Debug log
+    
+    return (
+        <View>
+            {promocodes.map(promocode => (
+                <View key={promocode.id} style={styles.promocodeCard}>
+                    <View style={{flex: 1}}>
+                        <View style={styles.promocodeHeader}>
+                            <Text style={styles.promocodeCode}>{promocode.code}</Text>
+                            <View style={[styles.statusBadge, { backgroundColor: promocode.isActive ? Colors.primaryLighter : Colors.redLighter }]}>
+                                <Text style={[styles.statusText, { color: promocode.isActive ? Colors.primary : Colors.red }]}>
+                                    {promocode.isActive ? 'Active' : 'Inactive'}
+                                </Text>
+                            </View>
+                        </View>
+                        <Text style={styles.promocodeDiscount}>{getDiscountText(promocode)}</Text>
+                        <Text style={styles.promocodeDetails}>
+                            Used: {promocode.usedCount}/{promocode.usageLimit} • Valid until: {formatDate(promocode.validUntil)}
+                        </Text>
+                        {promocode.description && (
+                            <Text style={styles.promocodeDescription}>{promocode.description}</Text>
+                        )}
+                    </View>
+                    <View style={styles.promocodeActions}>
+                        <TouchableOpacity onPress={() => handleEdit(promocode)}>
+                            <Edit size={18} color={Colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleDelete(promocode)}>
+                            <Trash2 size={18} color={Colors.red} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            ))}
+            {promocodes.length === 0 && (
+                <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>No promocodes created yet</Text>
+                </View>
+            )}
+            <TouchableOpacity style={styles.saveButton} onPress={() => { setEditingPromocode(null); setModalView('addOrEdit'); }}>
+                <Text style={styles.saveButtonText}>Add New Promocode</Text>
+            </TouchableOpacity>
+        </View>
+    );
+};
+
+const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: PromocodeData | null, onSave: (data: any) => void }) => {
+    const [formData, setFormData] = useState({
+        code: '',
+        discountType: 'percentage' as 'percentage' | 'fixed',
+        discountValue: '',
+        minOrderAmount: '',
+        maxDiscount: '',
+        usageLimit: '',
+        validFrom: new Date().toISOString().split('T')[0],
+        validUntil: '',
+        isActive: true,
+        description: '',
+    });
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Update form data when editingPromocode changes
+    useEffect(() => {
+        if (editingPromocode) {
+            setFormData({
+                code: editingPromocode.code || '',
+                discountType: editingPromocode.discountType || 'percentage',
+                discountValue: editingPromocode.discountValue?.toString() || '',
+                minOrderAmount: editingPromocode.minOrderAmount?.toString() || '',
+                maxDiscount: editingPromocode.maxDiscount?.toString() || '',
+                usageLimit: editingPromocode.usageLimit?.toString() || '',
+                validFrom: editingPromocode.validFrom ? new Date(editingPromocode.validFrom).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                validUntil: editingPromocode.validUntil ? new Date(editingPromocode.validUntil).toISOString().split('T')[0] : '',
+                isActive: editingPromocode.isActive ?? true,
+                description: editingPromocode.description || '',
+            });
+        } else {
+            // Reset form for new promocode
+            setFormData({
+                code: '',
+                discountType: 'percentage',
+                discountValue: '',
+                minOrderAmount: '',
+                maxDiscount: '',
+                usageLimit: '',
+                validFrom: new Date().toISOString().split('T')[0],
+                validUntil: '',
+                isActive: true,
+                description: '',
+            });
+        }
+    }, [editingPromocode]);
+
+    const handleSave = async () => {
+        if (!formData.code.trim() || !formData.discountValue.trim() || !formData.usageLimit.trim() || !formData.validUntil.trim()) {
+            Alert.alert('Error', 'Please fill in all required fields.');
+            return;
+        }
+
+        const discountValue = parseFloat(formData.discountValue);
+        const usageLimit = parseInt(formData.usageLimit);
+        const minOrderAmount = formData.minOrderAmount && formData.minOrderAmount.trim() !== '' ? parseFloat(formData.minOrderAmount) : undefined;
+        const maxDiscount = formData.maxDiscount && formData.maxDiscount.trim() !== '' ? parseFloat(formData.maxDiscount) : undefined;
+
+        if (isNaN(discountValue) || isNaN(usageLimit)) {
+            Alert.alert('Error', 'Please enter valid numbers for discount value and usage limit.');
+            return;
+        }
+
+        if (formData.discountType === 'percentage' && (discountValue <= 0 || discountValue > 100)) {
+            Alert.alert('Error', 'Percentage discount must be between 1 and 100.');
+            return;
+        }
+
+        if (formData.discountType === 'fixed' && discountValue <= 0) {
+            Alert.alert('Error', 'Fixed discount must be greater than 0.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            console.log('Saving form data, editingPromocode:', editingPromocode); // Debug log
+            console.log('Editing promocode ID:', editingPromocode?.id); // Debug log
+            
+            await onSave({
+                code: formData.code.trim().toUpperCase(),
+                discountType: formData.discountType,
+                discountValue,
+                minOrderAmount,
+                maxDiscount,
+                usageLimit,
+                validFrom: new Date(formData.validFrom),
+                validUntil: new Date(formData.validUntil),
+                isActive: formData.isActive,
+                description: formData.description.trim(),
+                isEdit: !!editingPromocode,
+                id: editingPromocode?.id,
+            });
+        } catch (error) {
+            console.error('Error saving promocode:', error);
+            Alert.alert('Error', 'An error occurred while saving.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <View>
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Promocode *</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.code} 
+                    onChangeText={text => setFormData({...formData, code: text})} 
+                    placeholder="Enter promocode (e.g., SAVE20)" 
+                    autoCapitalize="characters"
+                />
+            </View>
+            
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Discount Type *</Text>
+                <View style={styles.radioGroup}>
+                    <TouchableOpacity 
+                        style={[styles.radioOption, formData.discountType === 'percentage' && styles.radioOptionSelected]}
+                        onPress={() => setFormData({...formData, discountType: 'percentage'})}
+                    >
+                        <Text style={[styles.radioText, formData.discountType === 'percentage' && styles.radioTextSelected]}>Percentage</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.radioOption, formData.discountType === 'fixed' && styles.radioOptionSelected]}
+                        onPress={() => setFormData({...formData, discountType: 'fixed'})}
+                    >
+                        <Text style={[styles.radioText, formData.discountType === 'fixed' && styles.radioTextSelected]}>Fixed Amount</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Discount Value *</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.discountValue} 
+                    onChangeText={text => setFormData({...formData, discountValue: text})} 
+                    placeholder={formData.discountType === 'percentage' ? "Enter percentage (e.g., 20)" : "Enter amount (e.g., 10)"}
+                    keyboardType="numeric"
+                />
+            </View>
+
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Minimum Order Amount</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.minOrderAmount} 
+                    onChangeText={text => setFormData({...formData, minOrderAmount: text})} 
+                    placeholder="Enter minimum order amount" 
+                    keyboardType="numeric"
+                />
+            </View>
+
+            {formData.discountType === 'percentage' && (
+                <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Maximum Discount Amount</Text>
+                    <TextInput 
+                        style={styles.input} 
+                        value={formData.maxDiscount} 
+                        onChangeText={text => setFormData({...formData, maxDiscount: text})} 
+                        placeholder="Enter maximum discount amount" 
+                        keyboardType="numeric"
+                    />
+                </View>
+            )}
+
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Usage Limit *</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.usageLimit} 
+                    onChangeText={text => setFormData({...formData, usageLimit: text})} 
+                    placeholder="Enter usage limit" 
+                    keyboardType="numeric"
+                />
+            </View>
+
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Valid From</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.validFrom} 
+                    onChangeText={text => setFormData({...formData, validFrom: text})} 
+                    placeholder="YYYY-MM-DD"
+                />
+            </View>
+
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Valid Until *</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.validUntil} 
+                    onChangeText={text => setFormData({...formData, validUntil: text})} 
+                    placeholder="YYYY-MM-DD"
+                />
+            </View>
+
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Description</Text>
+                <TextInput 
+                    style={[styles.input, styles.textArea]} 
+                    value={formData.description} 
+                    onChangeText={text => setFormData({...formData, description: text})} 
+                    placeholder="Enter description (optional)" 
+                    multiline
+                    numberOfLines={3}
+                />
+            </View>
+
+            <View style={styles.permissionRow}>
+                <Text style={styles.permissionLabel}>Active</Text>
+                <Switch 
+                    value={formData.isActive} 
+                    onValueChange={(value) => setFormData({...formData, isActive: value})} 
+                    trackColor={{false: Colors.border, true: Colors.primaryLight}} 
+                    thumbColor={Colors.white} 
+                />
+            </View>
+
+            <TouchableOpacity 
+                style={[styles.saveButton, isLoading && styles.saveButtonDisabled]} 
+                onPress={handleSave}
+                disabled={isLoading}
+            >
+                <Text style={styles.saveButtonText}>
+                    {isLoading ? 'Saving...' : (editingPromocode ? 'Update Promocode' : 'Create Promocode')}
+                </Text>
+            </TouchableOpacity>
+        </View>
+    );
+};
 
 const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminData | null, onSave: (data: any) => void }) => {
     const [formData, setFormData] = useState({
@@ -272,16 +599,26 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const [editingAdmin, setEditingAdmin] = useState<SubAdminData | null>(null);
   const [subAdmins, setSubAdmins] = useState<SubAdminData[]>([]);
   const [isLoadingSubAdmins, setIsLoadingSubAdmins] = useState(false);
+  const [editingPromocode, setEditingPromocode] = useState<PromocodeData | null>(null);
+  const [promocodes, setPromocodes] = useState<PromocodeData[]>([]);
+  const [isLoadingPromocodes, setIsLoadingPromocodes] = useState(false);
 
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
 
-  // Load sub-admins when component mounts
+  // Load sub-admins and promocodes when component mounts
   useEffect(() => {
+    console.log('Component mounted, userSession:', userSession); // Debug log
     loadSubAdmins();
+    loadPromocodes();
   }, [userSession]);
+
+  // Monitor promocodes state changes
+  useEffect(() => {
+    console.log('Promocodes state changed:', promocodes); // Debug log
+  }, [promocodes]);
 
   const loadSubAdmins = async () => {
     if (!userSession?.uid) return;
@@ -351,6 +688,115 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
     }
   };
 
+  const loadPromocodes = async () => {
+    if (!userSession?.uid) return;
+    
+    console.log('Loading promocodes for userSession.uid:', userSession.uid); // Debug log
+    
+    setIsLoadingPromocodes(true);
+    try {
+      const adminPromocodes = await promocodeService.getPromocodesByAdmin(userSession.uid);
+      console.log('Loaded promocodes:', adminPromocodes); // Debug log
+      console.log('Setting promocodes state with length:', adminPromocodes.length); // Debug log
+      setPromocodes(adminPromocodes);
+    } catch (error) {
+      console.error('Error loading promocodes:', error);
+      Alert.alert('Error', 'Failed to load promocodes.');
+    } finally {
+      setIsLoadingPromocodes(false);
+    }
+  };
+
+  const handleSavePromocode = async (data: any) => {
+    if (!userSession?.uid) {
+      return;
+    }
+
+    console.log('Saving promocode data:', data); // Debug log
+
+    try {
+      if (data.isEdit) {
+        console.log('Updating promocode with ID:', data.id); // Debug log
+        
+        // Check if ID exists
+        if (!data.id) {
+          throw new Error('Promocode ID is missing. Cannot update.');
+        }
+        
+        // Update existing promocode
+        const updateData: any = {
+          code: data.code,
+          discountType: data.discountType,
+          discountValue: data.discountValue,
+          usageLimit: data.usageLimit,
+          validFrom: data.validFrom,
+          validUntil: data.validUntil,
+          isActive: data.isActive,
+        };
+
+        // Only add optional fields if they have values
+        if (data.minOrderAmount !== undefined && data.minOrderAmount !== null && data.minOrderAmount !== '') {
+          updateData.minOrderAmount = data.minOrderAmount;
+        }
+        if (data.maxDiscount !== undefined && data.maxDiscount !== null && data.maxDiscount !== '') {
+          updateData.maxDiscount = data.maxDiscount;
+        }
+        if (data.description !== undefined && data.description !== null && data.description.trim() !== '') {
+          updateData.description = data.description;
+        }
+
+        await promocodeService.updatePromocode(data.id, updateData);
+        Alert.alert('Success', 'Promocode updated successfully!');
+      } else {
+        console.log('Creating new promocode'); // Debug log
+        // Create new promocode
+        const createData: any = {
+          code: data.code,
+          discountType: data.discountType,
+          discountValue: data.discountValue,
+          usageLimit: data.usageLimit,
+          validFrom: data.validFrom,
+          validUntil: data.validUntil,
+          isActive: data.isActive,
+        };
+
+        // Only add optional fields if they have values
+        if (data.minOrderAmount !== undefined && data.minOrderAmount !== null && data.minOrderAmount !== '') {
+          createData.minOrderAmount = data.minOrderAmount;
+        }
+        if (data.maxDiscount !== undefined && data.maxDiscount !== null && data.maxDiscount !== '') {
+          createData.maxDiscount = data.maxDiscount;
+        }
+        if (data.description !== undefined && data.description !== null && data.description.trim() !== '') {
+          createData.description = data.description;
+        }
+
+        await promocodeService.createPromocode(userSession.uid, createData);
+        Alert.alert('Success', 'Promocode created successfully!');
+      }
+      
+      // Reload promocodes and close modal
+      await loadPromocodes();
+      setModalVisible(false);
+      setModalView('list');
+      setEditingPromocode(null);
+    } catch (error) {
+      console.error('Error saving promocode:', error);
+      Alert.alert('Error', 'Failed to save promocode. Please try again.');
+    }
+  };
+
+  const handleDeletePromocode = async (id: string) => {
+    try {
+      await promocodeService.deletePromocode(id);
+      Alert.alert('Success', 'Promocode permanently deleted.');
+      await loadPromocodes();
+    } catch (error) {
+      console.error('Error deleting promocode:', error);
+      Alert.alert('Error', 'Failed to delete promocode. Please try again.');
+    }
+  };
+
 
 
   const handleLogout = async () => {
@@ -388,7 +834,8 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
     { id: '2', title: 'Change Password', icon: Lock, action: () => openModal('changePassword') },
     // Only show sub-admin management for full admins, not sub-admins
     ...(userSession?.role === 'admin' ? [
-      { id: '3', title: 'Sub-admin Management', icon: Users, action: () => openModal('subAdmin') }
+      { id: '3', title: 'Sub-admin Management', icon: Users, action: () => openModal('subAdmin') },
+      { id: '4', title: 'Promocode Management', icon: Tag, action: () => openModal('promocode') }
     ] : []),
   ];
 
@@ -412,6 +859,18 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
                 editingAdmin={editingAdmin} 
                 onSave={handleSaveSubAdmin}
               />;
+          case 'promocode': 
+            return modalView === 'list' ? 
+              <PromocodeContent 
+                setModalView={setModalView} 
+                setEditingPromocode={setEditingPromocode} 
+                promocodes={promocodes}
+                onDeletePromocode={handleDeletePromocode}
+              /> : 
+              <AddPromocodeContent 
+                editingPromocode={editingPromocode} 
+                onSave={handleSavePromocode}
+              />;
           default: return null;
       }
   }
@@ -420,6 +879,10 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
       if (modalContent === 'subAdmin') {
           if (modalView === 'list') return 'Sub-admin Management';
           return editingAdmin ? 'Edit Sub-admin' : 'Add New Sub-admin';
+      }
+      if (modalContent === 'promocode') {
+          if (modalView === 'list') return 'Promocode Management';
+          return editingPromocode ? 'Edit Promocode' : 'Add New Promocode';
       }
       const item = menuItems.find(item => item.action.toString().includes(modalContent));
       return item ? item.title : '';
@@ -487,7 +950,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, {paddingBottom: insets.bottom}]}>
                 <View style={styles.modalHeader}>
-                    {modalView !== 'list' && modalContent === 'subAdmin' && (
+                    {modalView !== 'list' && (modalContent === 'subAdmin' || modalContent === 'promocode') && (
                         <TouchableOpacity onPress={() => setModalView('list')} style={styles.modalBack}>
                             <ArrowLeft size={24} color={Colors.textSecondary} />
                         </TouchableOpacity>
@@ -723,6 +1186,87 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  // --- Promocode Styles ---
+  promocodeCard: {
+      backgroundColor: Colors.background,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+  },
+  promocodeHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+  },
+  promocodeCode: {
+      fontSize: 18,
+      fontFamily: 'Inter_600SemiBold',
+      color: Colors.text,
+  },
+  statusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+  },
+  statusText: {
+      fontSize: 12,
+      fontFamily: 'Inter_500Medium',
+  },
+  promocodeDiscount: {
+      fontSize: 16,
+      fontFamily: 'Inter_500Medium',
+      color: Colors.primary,
+      marginBottom: 4,
+  },
+  promocodeDetails: {
+      fontSize: 14,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+      marginBottom: 4,
+  },
+  promocodeDescription: {
+      fontSize: 14,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+      fontStyle: 'italic',
+  },
+  promocodeActions: {
+      flexDirection: 'row',
+      gap: 16,
+  },
+  radioGroup: {
+      flexDirection: 'row',
+      gap: 12,
+  },
+  radioOption: {
+      flex: 1,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      alignItems: 'center',
+  },
+  radioOptionSelected: {
+      backgroundColor: Colors.primaryLighter,
+      borderColor: Colors.primary,
+  },
+  radioText: {
+      fontSize: 14,
+      fontFamily: 'Inter_500Medium',
+      color: Colors.textSecondary,
+  },
+  radioTextSelected: {
+      color: Colors.primary,
+  },
+  textArea: {
+      height: 80,
+      textAlignVertical: 'top',
   },
 });
 

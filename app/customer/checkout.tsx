@@ -1,9 +1,14 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
 import { ArrowLeft, MapPin } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../core/auth/AuthContext';
+import { useCart } from '../../core/context/CartContext';
+import { useAddress } from '../../core/context/AddressContext';
+import { CreateOrderData, orderService } from '../../core/services/orderService';
+import { UserData, userService } from '../../core/services/userService';
 
 // --- Color Palette (Matched with previous screens) ---
 const Colors = {
@@ -19,43 +24,147 @@ const Colors = {
   green: '#16A34A',
 };
 
-// --- Mock Data ---
-const user = {
-    address: '123, Main Street, Near Water Tank, Vadodara, Gujarat - 390001'
-};
-
-const orderDetails = {
-    subtotal: 1300,
-    deliveryCharge: 30,
-    gst: 65,
-    discount: 50,
-    total: 1345,
-};
-
 export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
-  const [selectedSlot, setSelectedSlot] = useState('today');
-  const [selectedPayment, setSelectedPayment] = useState('cod');
+  const { cartItems, getCartTotal, appliedPromocode, discount, clearCart } = useCart();
+  const { userSession } = useAuth();
+  const { address: deliveryAddress, updateAddress, isLoading: addressLoading } = useAddress();
+  
+  // State for user data
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  
+  // State for address modal
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [newAddress, setNewAddress] = useState('');
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,
   });
 
-  if (!fontsLoaded) {
+  // Load user data
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (!userSession?.uid) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const user = await userService.getUserById(userSession.uid);
+        if (user) {
+          setUserData(user);
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadUserData();
+  }, [userSession?.uid]);
+
+  // Calculate order details
+  const subtotal = getCartTotal();
+  const deliveryCharge = 30;
+  const gstAmount = subtotal * 0.05; // 5% GST
+  const totalAmount = subtotal + deliveryCharge + gstAmount - discount;
+
+  // Handle address change
+  const handleChangeAddress = () => {
+    setNewAddress(deliveryAddress || '');
+    setShowAddressModal(true);
+  };
+
+  // Handle add new address (when no address exists)
+  const handleAddAddress = () => {
+    setNewAddress('');
+    setShowAddressModal(true);
+  };
+
+  // Handle save address
+  const handleSaveAddress = async () => {
+    if (!newAddress.trim()) return;
+
+    setIsSavingAddress(true);
+    try {
+      // Update address using shared context (automatically syncs with profile)
+      await updateAddress(newAddress.trim());
+      setShowAddressModal(false);
+      Alert.alert('Success', 'Address updated successfully!');
+    } catch (error) {
+      console.error('Error saving address:', error);
+      Alert.alert('Error', 'Failed to save address. Please try again.');
+    } finally {
+      setIsSavingAddress(false);
+    }
+  };
+
+  // Handle place order
+  const handlePlaceOrder = async () => {
+    if (!userSession?.uid || !userData) {
+      Alert.alert('Error', 'Please login to place an order.');
+      return;
+    }
+
+    if (!deliveryAddress.trim()) {
+      Alert.alert('Error', 'Please add a delivery address before placing your order.');
+      return;
+    }
+
+    if (cartItems.length === 0) {
+      Alert.alert('Error', 'Your cart is empty.');
+      return;
+    }
+
+    setIsPlacingOrder(true);
+    try {
+      const orderData: CreateOrderData = {
+        userId: userSession.uid,
+        customerName: userData.displayName,
+        customerPhone: userData.phoneNumber || '',
+        deliveryAddress: deliveryAddress.trim(),
+        items: cartItems,
+        subtotal,
+        deliveryCharge,
+        gst: gstAmount,
+        discount,
+        total: totalAmount,
+        appliedPromocode,
+        paymentMethod: 'cod',
+      };
+
+      const orderId = await orderService.createOrder(orderData);
+      
+      // Clear cart after successful order
+      await clearCart();
+      
+      Alert.alert(
+        'Order Placed Successfully!',
+        `Your order #${orderId} has been confirmed and is being processed.\n\nWe'll deliver your order within 24 hours.\n\nYou'll receive updates on your order status.\n\nPayment: Cash on Delivery`,
+        [
+          {
+            text: 'View Order Details',
+            onPress: () => router.push(`/customer/ordercomplete?orderId=${orderId}`)
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error placing order:', error);
+      Alert.alert('Error', 'Failed to place order. Please try again.');
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
+
+  if (!fontsLoaded || isLoading || addressLoading) {
     return <View style={styles.loadingContainer} />;
   }
 
-  const PaymentOption = ({ value, label }) => (
-    <TouchableOpacity 
-        style={[styles.paymentOption, selectedPayment === value && styles.paymentOptionSelected]}
-        onPress={() => setSelectedPayment(value)}
-    >
-        <Text style={[styles.paymentLabel, selectedPayment === value && styles.paymentLabelSelected]}>{label}</Text>
-        <View style={[styles.radioOuter, selectedPayment === value && styles.radioSelected]}>
-            {selectedPayment === value && <View style={styles.radioInner}/>}
-        </View>
-    </TouchableOpacity>
-  );
+
 
   return (
     <View style={styles.container}>
@@ -74,43 +183,35 @@ export default function CheckoutScreen() {
         {/* Delivery Address */}
         <View style={styles.section}>
             <Text style={styles.sectionTitle}>Delivery Address</Text>
-            <View style={styles.addressCard}>
-                <MapPin size={24} color={Colors.primary} />
-                <Text style={styles.addressText}>{user.address}</Text>
-                <TouchableOpacity>
-                    <Text style={styles.changeButtonText}>Change</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-
-        {/* Delivery Slot */}
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Select Delivery Slot</Text>
-            <View style={styles.slotContainer}>
-                <TouchableOpacity 
-                    style={[styles.slotButton, selectedSlot === 'today' && styles.slotButtonSelected]}
-                    onPress={() => setSelectedSlot('today')}
-                >
-                    <Text style={[styles.slotText, selectedSlot === 'today' && styles.slotTextSelected]}>Today</Text>
-                    <Text style={[styles.slotSubText, selectedSlot === 'today' && styles.slotSubTextSelected]}>Within 2 hours</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                    style={[styles.slotButton, selectedSlot === 'tomorrow' && styles.slotButtonSelected]}
-                    onPress={() => setSelectedSlot('tomorrow')}
-                >
-                    <Text style={[styles.slotText, selectedSlot === 'tomorrow' && styles.slotTextSelected]}>Tomorrow</Text>
-                    <Text style={[styles.slotSubText, selectedSlot === 'tomorrow' && styles.slotSubTextSelected]}>9am - 6pm</Text>
-                </TouchableOpacity>
-            </View>
+            {deliveryAddress ? (
+                <View style={styles.addressCard}>
+                    <MapPin size={24} color={Colors.primary} />
+                    <Text style={styles.addressText}>{deliveryAddress}</Text>
+                    <TouchableOpacity onPress={handleChangeAddress}>
+                        <Text style={styles.changeButtonText}>Change</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <View style={styles.addressCard}>
+                    <MapPin size={24} color={Colors.textSecondary} />
+                    <Text style={styles.addressText}>No address added</Text>
+                    <TouchableOpacity onPress={handleAddAddress}>
+                        <Text style={styles.changeButtonText}>Add Address</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
 
         {/* Payment Method */}
         <View style={styles.section}>
             <Text style={styles.sectionTitle}>Payment Method</Text>
             <View style={styles.paymentContainer}>
-                <PaymentOption value="cod" label="Cash on Delivery" />
-                <PaymentOption value="card" label="Credit/Debit Card" />
-                <PaymentOption value="upi" label="UPI / Net Banking" />
+                <View style={[styles.paymentOption, styles.paymentOptionSelected]}>
+                    <Text style={[styles.paymentLabel, styles.paymentLabelSelected]}>Cash on Delivery</Text>
+                    <View style={[styles.radioOuter, styles.radioSelected]}>
+                        <View style={styles.radioInner}/>
+                    </View>
+                </View>
             </View>
         </View>
 
@@ -120,24 +221,26 @@ export default function CheckoutScreen() {
             <View style={styles.billCard}>
                 <View style={styles.billRow}>
                     <Text style={styles.billLabel}>Item Total</Text>
-                    <Text style={styles.billValue}>₹{orderDetails.subtotal.toFixed(2)}</Text>
+                    <Text style={styles.billValue}>₹{subtotal.toFixed(2)}</Text>
                 </View>
                 <View style={styles.billRow}>
                     <Text style={styles.billLabel}>Delivery Charge</Text>
-                    <Text style={styles.billValue}>₹{orderDetails.deliveryCharge.toFixed(2)}</Text>
+                    <Text style={styles.billValue}>₹{deliveryCharge.toFixed(2)}</Text>
                 </View>
                 <View style={styles.billRow}>
                     <Text style={styles.billLabel}>GST (5%)</Text>
-                    <Text style={styles.billValue}>₹{orderDetails.gst.toFixed(2)}</Text>
+                    <Text style={styles.billValue}>₹{gstAmount.toFixed(2)}</Text>
                 </View>
-                <View style={styles.billRow}>
-                    <Text style={[styles.billLabel, {color: Colors.green}]}>Promo Discount</Text>
-                    <Text style={[styles.billValue, {color: Colors.green}]}>- ₹{orderDetails.discount.toFixed(2)}</Text>
-                </View>
+                {discount > 0 && (
+                    <View style={styles.billRow}>
+                        <Text style={[styles.billLabel, {color: Colors.green}]}>Promo Discount</Text>
+                        <Text style={[styles.billValue, {color: Colors.green}]}>- ₹{discount.toFixed(2)}</Text>
+                    </View>
+                )}
                 <View style={styles.divider} />
                 <View style={styles.billRow}>
                     <Text style={styles.billTotalLabel}>To Pay</Text>
-                    <Text style={styles.billTotalValue}>₹{orderDetails.total.toFixed(2)}</Text>
+                    <Text style={styles.billTotalValue}>₹{totalAmount.toFixed(2)}</Text>
                 </View>
             </View>
         </View>
@@ -146,13 +249,70 @@ export default function CheckoutScreen() {
       {/* Checkout Footer */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 70 }]}>
         <View>
-            <Text style={styles.footerTotalAmount}>₹{orderDetails.total.toFixed(2)}</Text>
+            <Text style={styles.footerTotalAmount}>₹{totalAmount.toFixed(2)}</Text>
             <Text style={styles.footerTotalLabel}>TOTAL</Text>
         </View>
-        <TouchableOpacity style={styles.checkoutButton} onPress={() => router.push('/customer/ordercomplete')}>
-            <Text style={styles.checkoutButtonText}>Place Order</Text>
+        <TouchableOpacity 
+            style={[styles.checkoutButton, isPlacingOrder && { opacity: 0.6 }]} 
+            onPress={handlePlaceOrder}
+            disabled={isPlacingOrder}
+        >
+            <Text style={styles.checkoutButtonText}>
+                {isPlacingOrder ? 'Placing Order...' : 'Place Order'}
+            </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Address Modal */}
+      <Modal
+        visible={showAddressModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddressModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {deliveryAddress ? 'Change Delivery Address' : 'Add Delivery Address'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowAddressModal(false)}>
+                <Text style={styles.modalCloseButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <TextInput
+              style={styles.addressInput}
+              placeholder="Enter your delivery address"
+              placeholderTextColor={Colors.textSecondary}
+              value={newAddress}
+              onChangeText={setNewAddress}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.modalCancelButton}
+                onPress={() => setShowAddressModal(false)}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalSaveButton, (!newAddress.trim() || isSavingAddress) && { opacity: 0.6 }]}
+                onPress={handleSaveAddress}
+                disabled={!newAddress.trim() || isSavingAddress}
+              >
+                <Text style={styles.modalSaveButtonText}>
+                  {isSavingAddress ? 'Saving...' : (deliveryAddress ? 'Update Address' : 'Save Address')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -214,39 +374,6 @@ const styles = StyleSheet.create({
   changeButtonText: {
       fontSize: 14,
       fontFamily: 'Inter_600SemiBold',
-      color: Colors.primary,
-  },
-  slotContainer: {
-      flexDirection: 'row',
-      gap: 16,
-  },
-  slotButton: {
-      flex: 1,
-      backgroundColor: Colors.surface,
-      borderRadius: 12,
-      padding: 16,
-      borderWidth: 1.5,
-      borderColor: Colors.border,
-  },
-  slotButtonSelected: {
-      backgroundColor: Colors.primaryLighter,
-      borderColor: Colors.primary,
-  },
-  slotText: {
-      fontSize: 14,
-      fontFamily: 'Inter_600SemiBold',
-      color: Colors.text,
-  },
-  slotTextSelected: {
-      color: Colors.primary,
-  },
-  slotSubText: {
-      fontSize: 12,
-      fontFamily: 'Inter_400Regular',
-      color: Colors.textSecondary,
-      marginTop: 4,
-  },
-  slotSubTextSelected: {
       color: Colors.primary,
   },
   paymentContainer: {
@@ -376,6 +503,79 @@ const styles = StyleSheet.create({
   checkoutButtonText: {
     color: Colors.white,
     fontFamily: 'Inter_600SemiBold',
+    fontSize: 16,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+  },
+  modalCloseButton: {
+    fontSize: 20,
+    color: Colors.textSecondary,
+    padding: 4,
+  },
+  addressInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+    minHeight: 100,
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    color: Colors.textSecondary,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 16,
+  },
+  modalSaveButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+  },
+  modalSaveButtonText: {
+    color: Colors.white,
+    fontFamily: 'Inter_500Medium',
     fontSize: 16,
   },
 });

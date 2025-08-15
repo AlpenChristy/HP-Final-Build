@@ -1,10 +1,11 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
-import { ArrowLeft, CheckCircle, Minus, Plus, Tag } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { Alert, ArrowLeft, CheckCircle, Minus, Plus, Tag, X } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
 import { Image, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../core/context/CartContext';
+import { PromocodeData, promocodeService } from '../../core/services/promocodeService';
 
 // --- Color Palette (Matched with previous screens) ---
 const Colors = {
@@ -41,19 +42,79 @@ const initialCartItems = [
 
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
-  const { cartItems, loading, updateQuantity, removeFromCart, getCartTotal } = useCart();
+  
+  console.log('CartScreen: About to use cart context');
+  
+  const { 
+    cartItems, 
+    loading, 
+    updateQuantity, 
+    removeFromCart, 
+    getCartTotal,
+    appliedPromocode,
+    discount,
+    setAppliedPromocode,
+    setDiscount,
+    clearPromocode,
+    recalculatePromocodeDiscount
+  } = useCart();
+  
+  console.log('CartScreen: Cart context loaded successfully', { 
+    cartItemsCount: cartItems?.length, 
+    loading, 
+    appliedPromocode: !!appliedPromocode, 
+    discount 
+  });
   const [promoCode, setPromoCode] = useState('');
-  const [discount, setDiscount] = useState(0);
+  const [isLoadingPromocode, setIsLoadingPromocode] = useState(false);
+  const [promocodeError, setPromocodeError] = useState('');
+  const [availablePromocodes, setAvailablePromocodes] = useState<PromocodeData[]>([]);
+  const [showAvailablePromocodes, setShowAvailablePromocodes] = useState(false);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,
   });
 
+  // Load available promocodes
+  useEffect(() => {
+    const loadAvailablePromocodes = async () => {
+      try {
+        const promocodes = await promocodeService.getActivePromocodes();
+        setAvailablePromocodes(promocodes);
+      } catch (error) {
+        console.error('Error loading available promocodes:', error);
+        // Don't show error to user, just log it and continue without available promocodes
+        // The promocode input will still work for manually entered codes
+      }
+    };
+
+    loadAvailablePromocodes();
+  }, []);
+
+  // Recalculate discount when cart total changes
+  useEffect(() => {
+    if (appliedPromocode) {
+      const result = recalculatePromocodeDiscount();
+      
+      if (!result.valid && result.error) {
+        setPromocodeError(result.error);
+      } else {
+        setPromocodeError(''); // Clear any previous errors
+      }
+      
+      console.log('Promocode discount recalculated:', {
+        valid: result.valid,
+        discount: result.discount,
+        error: result.error
+      });
+    }
+  }, [cartItems, appliedPromocode]); // Recalculate when cart items or applied promocode changes
+
   if (!fontsLoaded) {
     return <View style={styles.loadingContainer} />;
   }
 
-  const handleQuantityChange = (itemId, type) => {
+  const handleQuantityChange = (itemId: string, type: 'increase' | 'decrease') => {
   const item = cartItems.find(item => item.id === itemId);
   if (!item) return;
   
@@ -71,12 +132,52 @@ export default function CartScreen() {
   }
 };
   
-  const handleApplyPromo = () => {
-      if (promoCode.toUpperCase() === 'SAVE50') {
-          setDiscount(50);
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) {
+      setPromocodeError('Please enter a promo code');
+      return;
+    }
+
+    setIsLoadingPromocode(true);
+    setPromocodeError('');
+    
+    try {
+      const subtotal = getCartTotal();
+      const validation = await promocodeService.validatePromocode(promoCode.trim().toUpperCase(), subtotal);
+      
+      if (validation.valid && validation.promocode) {
+        // Calculate discount based on promocode type
+        let calculatedDiscount = 0;
+        if (validation.promocode.discountType === 'percentage') {
+          calculatedDiscount = (subtotal * validation.promocode.discountValue) / 100;
+          // Apply maximum discount if set
+          if (validation.promocode.maxDiscount && calculatedDiscount > validation.promocode.maxDiscount) {
+            calculatedDiscount = validation.promocode.maxDiscount;
+          }
+        } else {
+          calculatedDiscount = validation.promocode.discountValue;
+        }
+        
+        setDiscount(calculatedDiscount);
+        setAppliedPromocode(validation.promocode);
+        setPromocodeError('');
       } else {
-          setDiscount(0);
+        clearPromocode();
+        setPromocodeError(validation.error || 'Invalid promo code');
       }
+    } catch (error) {
+      console.error('Error applying promocode:', error);
+      clearPromocode();
+      setPromocodeError('Error applying promo code. Please try again.');
+    } finally {
+      setIsLoadingPromocode(false);
+    }
+  };
+
+  const handleRemovePromocode = () => {
+    setPromoCode('');
+    clearPromocode();
+    setPromocodeError('');
   };
 
   const calculateSubtotal = () => {
@@ -88,7 +189,7 @@ export default function CartScreen() {
   const gstAmount = subtotal * 0.05; // 5% GST
   const totalAmount = subtotal + deliveryCharge + gstAmount - discount;
 
-  const renderCartItem = (item) => (
+  const renderCartItem = (item: any) => (
   <View key={item.id} style={styles.itemCard}>
     <Image source={{ uri: item.product.image }} style={styles.itemImage} />
     <View style={styles.itemDetails}>
@@ -137,16 +238,88 @@ export default function CartScreen() {
                     placeholder="Enter promo code"
                     placeholderTextColor={Colors.textSecondary}
                     value={promoCode}
-                    onChangeText={setPromoCode}
+                    onChangeText={(text) => {
+                        setPromoCode(text);
+                        setPromocodeError(''); // Clear error when user types
+                    }}
+                    editable={!appliedPromocode} // Disable input when promocode is applied
                 />
-                <TouchableOpacity style={styles.applyButton} onPress={handleApplyPromo}>
-                    <Text style={styles.applyButtonText}>Apply</Text>
-                </TouchableOpacity>
+                {appliedPromocode ? (
+                    <TouchableOpacity style={[styles.applyButton, { backgroundColor: Colors.red }]} onPress={handleRemovePromocode}>
+                        <X size={16} color={Colors.white} />
+                    </TouchableOpacity>
+                ) : (
+                    <TouchableOpacity 
+                        style={[styles.applyButton, isLoadingPromocode && { opacity: 0.6 }]} 
+                        onPress={handleApplyPromo}
+                        disabled={isLoadingPromocode}
+                    >
+                        <Text style={styles.applyButtonText}>
+                            {isLoadingPromocode ? 'Applying...' : 'Apply'}
+                        </Text>
+                    </TouchableOpacity>
+                )}
             </View>
-            {discount > 0 && (
+            
+            {/* Promocode Success */}
+            {appliedPromocode && (
                 <View style={styles.promoSuccess}>
                     <CheckCircle size={16} color={Colors.green} />
-                    <Text style={styles.promoSuccessText}>Promo code applied! You saved ₹{discount.toFixed(2)}</Text>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.promoSuccessText}>
+                            {appliedPromocode.code} applied! You saved ₹{discount.toFixed(2)}
+                        </Text>
+                        {appliedPromocode.description && (
+                            <Text style={styles.promoDescription}>{appliedPromocode.description}</Text>
+                        )}
+                    </View>
+                </View>
+            )}
+            
+            {/* Promocode Error */}
+            {promocodeError && (
+                <View style={styles.promoError}>
+                    <Text style={styles.promoErrorText}>{promocodeError}</Text>
+                </View>
+            )}
+            
+            {/* Available Promocodes */}
+            {availablePromocodes.length > 0 && (
+                <View style={styles.availablePromocodes}>
+                    <TouchableOpacity 
+                        style={styles.showPromocodesButton}
+                        onPress={() => setShowAvailablePromocodes(!showAvailablePromocodes)}
+                    >
+                        <Text style={styles.showPromocodesText}>
+                            {showAvailablePromocodes ? 'Hide' : 'Show'} Available Promocodes ({availablePromocodes.length})
+                        </Text>
+                    </TouchableOpacity>
+                    
+                    {showAvailablePromocodes && (
+                        <View style={styles.promocodesList}>
+                            {availablePromocodes.map((promocode) => (
+                                <View key={promocode.id} style={styles.promocodeItem}>
+                                    <View style={styles.promocodeHeader}>
+                                        <Text style={styles.promocodeCode}>{promocode.code}</Text>
+                                        <Text style={styles.promocodeDiscount}>
+                                            {promocode.discountType === 'percentage' 
+                                                ? `${promocode.discountValue}% off` 
+                                                : `₹${promocode.discountValue} off`
+                                            }
+                                        </Text>
+                                    </View>
+                                    {promocode.description && (
+                                        <Text style={styles.promocodeItemDescription}>{promocode.description}</Text>
+                                    )}
+                                    {promocode.minOrderAmount && (
+                                        <Text style={styles.promocodeMinOrder}>
+                                            Min. order: ₹{promocode.minOrderAmount}
+                                        </Text>
+                                    )}
+                                </View>
+                            ))}
+                        </View>
+                    )}
                 </View>
             )}
         </View>
@@ -188,7 +361,21 @@ export default function CartScreen() {
             <Text style={styles.footerTotalAmount}>₹{totalAmount.toFixed(2)}</Text>
             <Text style={styles.footerTotalLabel}>TOTAL</Text>
         </View>
-        <TouchableOpacity style={styles.checkoutButton} onPress={() => router.push('/customer/checkout')}>
+        <TouchableOpacity 
+            style={styles.checkoutButton} 
+            onPress={async () => {
+                // Increment promocode usage if applied
+                if (appliedPromocode) {
+                    try {
+                        await promocodeService.incrementUsageCount(appliedPromocode.id);
+                        console.log('Promocode usage incremented');
+                    } catch (error) {
+                        console.error('Error incrementing promocode usage:', error);
+                    }
+                }
+                router.push('/customer/checkout');
+            }}
+        >
             <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
         </TouchableOpacity>
       </View>
@@ -328,6 +515,75 @@ const styles = StyleSheet.create({
   promoSuccessText: {
       color: Colors.green,
       fontFamily: 'Inter_500Medium',
+      fontSize: 14,
+  },
+  promoDescription: {
+      color: Colors.textSecondary,
+      fontFamily: 'Inter_400Regular',
+      fontSize: 12,
+      marginTop: 2,
+  },
+  promoError: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 12,
+  },
+  promoErrorText: {
+      color: Colors.red,
+      fontFamily: 'Inter_500Medium',
+      fontSize: 14,
+  },
+  availablePromocodes: {
+      marginTop: 16,
+  },
+  showPromocodesButton: {
+      paddingVertical: 8,
+  },
+  showPromocodesText: {
+      color: Colors.primary,
+      fontFamily: 'Inter_500Medium',
+      fontSize: 14,
+      textDecorationLine: 'underline',
+  },
+  promocodesList: {
+      marginTop: 12,
+      gap: 8,
+  },
+  promocodeItem: {
+      backgroundColor: Colors.primaryLighter,
+      borderRadius: 8,
+      padding: 12,
+      borderLeftWidth: 3,
+      borderLeftColor: Colors.primary,
+  },
+  promocodeHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 4,
+  },
+  promocodeCode: {
+      fontSize: 14,
+      fontFamily: 'Inter_600SemiBold',
+      color: Colors.primary,
+  },
+  promocodeDiscount: {
+      fontSize: 14,
+      fontFamily: 'Inter_600SemiBold',
+      color: Colors.green,
+  },
+  promocodeItemDescription: {
+      fontSize: 12,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+      marginBottom: 4,
+  },
+  promocodeMinOrder: {
+      fontSize: 11,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+      fontStyle: 'italic',
   },
   billCard: {
     backgroundColor: Colors.surface,

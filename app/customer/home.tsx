@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '../../core/auth/AuthContext';
+import { useCart } from '../../core/context/CartContext';
 
 // --- Color Palette (Matched with AuthScreen) ---
 const Colors = {
@@ -36,26 +37,33 @@ export default function CustomerHomeScreen() {
   // Get the safe area insets, specifically the top one for the status bar
   const insets = useSafeAreaInsets();
 
-
-
   // Create user object from session for compatibility
   const user = {
-    name: userSession.displayName || 'User'
+    name: userSession?.displayName || 'User'
+  };
+
+  // Get cart items for badge count
+  const { cartItems } = useCart();
+
+  // Calculate total items in cart
+  const getCartItemCount = () => {
+    return cartItems.reduce((total, item) => total + item.quantity, 0);
   };
 
   // Handler functions for button actions
   const handleOrderRefill = () => {
-    Alert.alert('Order Refill', 'Redirecting to order placement...');
+    // Navigate to the Products tab
+    router.push('/customer/products');
   };
 
   const handleTrackOrder = () => {
-    // Navigate to the Orders tab
-    router.push('/customer/delivery');
+    // Navigate to the Orders tab with current tab active
+    router.push('/customer/orders');
   };
 
   const handleOrderHistory = () => {
-    // Navigate to the Orders tab
-    router.push('/customer/delivery');
+    // Navigate to the Orders tab with history tab active
+    router.push('/customer/orders?tab=history');
   };
 
   const handleClaimOffer = () => {
@@ -95,6 +103,11 @@ export default function CustomerHomeScreen() {
                 </View>
                 <TouchableOpacity style={styles.cartIconContainer} onPress={handleCartPress}>
                     <ShoppingCart size={26} color={Colors.white} />
+                    {getCartItemCount() > 0 && (
+                        <View style={styles.cartBadge}>
+                            <Text style={styles.cartBadgeText}>{getCartItemCount()}</Text>
+                        </View>
+                    )}
                 </TouchableOpacity>
             </View>
 
@@ -204,6 +217,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 8,
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  cartBadgeText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
   },
   mainContent: {
     padding: 20,

@@ -1,6 +1,6 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
-import { ArrowLeft, ChevronDown, Minus, Plus, Search, ShoppingCart, SlidersHorizontal, X } from 'lucide-react-native';
+import { ArrowLeft, Minus, Plus, Search, ShoppingCart, SlidersHorizontal, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   Image,
@@ -35,17 +35,6 @@ const Colors = {
   accent: '#F59E0B',
 };
 
-
-// --- Filter Chip Component ---
-const FilterChip = ({ icon, label, hasDropdown }) => (
-  <TouchableOpacity style={styles.chip}>
-    {icon}
-    <Text style={styles.chipText}>{label}</Text>
-    {hasDropdown && <ChevronDown size={16} color={Colors.textSecondary} style={{ marginLeft: 4 }} />}
-  </TouchableOpacity>
-);
-
-
 export default function ProductsScreen() {
   const insets = useSafeAreaInsets();
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -57,7 +46,12 @@ export default function ProductsScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const { addToCart } = useCart();
+  const { addToCart, cartItems } = useCart();
+
+  // Calculate total items in cart
+  const getCartItemCount = () => {
+    return cartItems.reduce((total, item) => total + item.quantity, 0);
+  };
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -88,7 +82,10 @@ export default function ProductsScreen() {
 
   const openProductModal = (product) => {
     setSelectedProduct(product);
-    setModalQuantity(1); // Reset quantity to 1 when modal opens
+    // Check if product is already in cart and set modal quantity accordingly
+    const existingCartItem = cartItems.find(item => item.productId === product.id);
+    const initialQuantity = existingCartItem ? existingCartItem.quantity : 1;
+    setModalQuantity(initialQuantity);
     setModalVisible(true);
   };
 
@@ -111,6 +108,10 @@ export default function ProductsScreen() {
     return (selectedProduct.price * modalQuantity);
   };
 
+  const handleAddToCartDirectly = (product) => {
+    addToCart(product, 1); // Add 1 quantity directly
+  };
+
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -128,24 +129,33 @@ export default function ProductsScreen() {
           <Text style={styles.headerTitle}>Products</Text>
         </View>
         <TouchableOpacity style={styles.headerIcon} onPress={() => router.push('/customer/cart')}>
-          <ShoppingCart size={26} color={Colors.white} />
+          <View style={styles.cartIconContainer}>
+            <ShoppingCart size={26} color={Colors.white} />
+            {getCartItemCount() > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{getCartItemCount()}</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       </View>
 
       <View style={styles.controlsContainer}>
-        <View style={styles.searchContainer}>
-          <Search size={20} color={Colors.textSecondary} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search for a cylinder..."
-            placeholderTextColor={Colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+        <View style={styles.searchAndFilterContainer}>
+          <View style={styles.searchContainer}>
+            <Search size={20} color={Colors.textSecondary} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for a cylinder..."
+              placeholderTextColor={Colors.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+          <TouchableOpacity style={styles.filterIcon}>
+            <SlidersHorizontal size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipContainer}>
-          <FilterChip icon={<SlidersHorizontal size={16} color={Colors.textSecondary} />} label="Filters" />
-        </ScrollView>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -166,9 +176,12 @@ export default function ProductsScreen() {
               </View>
             </View>
             {product.inStock ? (
-              <View style={styles.addButton}>
-                <Plus size={22} color={Colors.white} />
-              </View>
+              <TouchableOpacity 
+                style={styles.cartButton}
+                onPress={() => handleAddToCartDirectly(product)}
+              >
+                <ShoppingCart size={20} color={Colors.white} />
+              </TouchableOpacity>
             ) : (
               <View style={styles.outOfStockBadge}>
                 <Text style={styles.outOfStockText}>Unavailable</Text>
@@ -229,7 +242,9 @@ export default function ProductsScreen() {
                       closeModal();
                     }}
                   >
-                    <Text style={styles.modalAddButtonText}>Add to Cart</Text>
+                    <Text style={styles.modalAddButtonText}>
+                      {cartItems.find(item => item.productId === selectedProduct?.id) ? 'Update Cart' : 'Add to Cart'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -264,6 +279,26 @@ const styles = StyleSheet.create({
     color: Colors.white,
     marginLeft: 12,
   },
+  cartIconContainer: {
+    position: 'relative',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  cartBadgeText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
+  },
 
   controlsContainer: {
     paddingTop: 16,
@@ -272,12 +307,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
+  searchAndFilterContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
   searchContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.background,
     borderRadius: 16,
-    marginHorizontal: 16,
     paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -290,26 +332,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: Colors.text,
   },
-  chipContainer: {
-    paddingTop: 16,
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  filterIcon: {
     backgroundColor: Colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 100,
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 6,
-  },
-  chipText: {
-    fontFamily: 'Inter_500Medium',
-    fontSize: 14,
-    color: Colors.textSecondary,
+    marginLeft: 12,
   },
 
   content: { padding: 20, paddingBottom: 40 },
@@ -365,11 +394,19 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textDecorationLine: 'line-through',
   },
-  addButton: {
+  outOfStockBadge: {
+    backgroundColor: Colors.errorLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginLeft: 10,
+  },
+  outOfStockText: { fontSize: 12, color: Colors.error, fontFamily: 'Inter_600SemiBold' },
+  cartButton: {
     backgroundColor: Colors.primary,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 10,
@@ -379,14 +416,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  outOfStockBadge: {
-    backgroundColor: Colors.errorLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginLeft: 10,
-  },
-  outOfStockText: { fontSize: 12, color: Colors.error, fontFamily: 'Inter_600SemiBold' },
 
   // --- REFINED MODAL STYLES ---
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

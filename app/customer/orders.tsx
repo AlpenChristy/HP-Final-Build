@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, CheckCircle, Clock, Package, Truck, X } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -129,9 +129,19 @@ const getStatusInfo = (status) => {
 
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState('current');
   const [invoiceVisible, setInvoiceVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  // Set initial tab based on URL parameter
+  useEffect(() => {
+    if (params.tab === 'history') {
+      setActiveTab('history');
+    } else {
+      setActiveTab('current');
+    }
+  }, [params.tab]);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,

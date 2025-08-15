@@ -1,10 +1,12 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
 import { ArrowLeft, Bell, ChevronRight, Edit, HelpCircle, Lock, LogOut, Mail, MapPin, Phone, Tag, Trash2, Truck, User, X } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
+import { useAddress } from '../../core/context/AddressContext';
+import { UserData, userService } from '../../core/services/userService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -55,21 +57,160 @@ const PersonalInfoContent = ({ user }) => {
     );
 };
 
-const DeliveryAddressContent = ({ user }) => (
-    <View>
-        <View style={styles.addressCard}>
-            <MapPin size={20} color={Colors.primary} />
-            <Text style={styles.addressText}>{user.address}</Text>
-            <View style={styles.addressActions}>
-                <TouchableOpacity><Edit size={18} color={Colors.textSecondary} /></TouchableOpacity>
-                <TouchableOpacity><Trash2 size={18} color={Colors.red} /></TouchableOpacity>
-            </View>
+const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
+    const { address: sharedAddress, updateAddress } = useAddress();
+    const [isEditing, setIsEditing] = useState(false);
+    const [localAddress, setLocalAddress] = useState(sharedAddress || '');
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Update local address state when shared address changes
+    useEffect(() => {
+        setLocalAddress(sharedAddress || '');
+    }, [sharedAddress]);
+
+    const handleSaveAddress = async () => {
+        if (!localAddress.trim()) {
+            Alert.alert('Error', 'Please enter a valid address.');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            // Update address using shared context (automatically syncs with checkout)
+            await updateAddress(localAddress.trim());
+            setIsEditing(false);
+            Alert.alert('Success', 'Address updated successfully!');
+        } catch (error) {
+            console.error('Error saving address:', error);
+            Alert.alert('Error', 'Failed to save address. Please try again.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDeleteAddress = () => {
+        Alert.alert(
+            'Delete Address',
+            'Are you sure you want to delete this address?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            // Update address using shared context (automatically syncs with checkout)
+                            await updateAddress('');
+                            setLocalAddress('');
+                            Alert.alert('Success', 'Address deleted successfully!');
+                        } catch (error) {
+                            console.error('Error deleting address:', error);
+                            Alert.alert('Error', 'Failed to delete address. Please try again.');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    return (
+        <View>
+            {sharedAddress ? (
+                <View style={styles.addressCard}>
+                    <MapPin size={20} color={Colors.primary} />
+                    {isEditing ? (
+                        <View style={styles.addressEditContainer}>
+                            <TextInput
+                                style={styles.addressInput}
+                                value={localAddress}
+                                onChangeText={setLocalAddress}
+                                placeholder="Enter your delivery address"
+                                multiline
+                                numberOfLines={4}
+                                textAlignVertical="top"
+                                autoFocus={true}
+                            />
+                        </View>
+                    ) : (
+                        <Text style={styles.addressText}>{sharedAddress}</Text>
+                    )}
+                    <View style={styles.addressActions}>
+                        {isEditing ? (
+                            <>
+                                <TouchableOpacity 
+                                    onPress={handleSaveAddress}
+                                    disabled={isSaving}
+                                >
+                                    <Text style={styles.saveButtonText}>
+                                        {isSaving ? 'Saving...' : 'Save'}
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => {
+                                    setIsEditing(false);
+                                    setLocalAddress(sharedAddress || '');
+                                }}>
+                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                                </TouchableOpacity>
+                            </>
+                        ) : (
+                            <>
+                                <TouchableOpacity onPress={() => setIsEditing(true)}>
+                                    <Edit size={18} color={Colors.textSecondary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={handleDeleteAddress}>
+                                    <Trash2 size={18} color={Colors.red} />
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </View>
+                </View>
+            ) : (
+                <View style={styles.emptyAddressCard}>
+                    <MapPin size={24} color={Colors.textSecondary} />
+                    <Text style={styles.emptyAddressText}>No address added</Text>
+                    <TouchableOpacity 
+                        style={styles.addAddressButton}
+                        onPress={() => setIsEditing(true)}
+                    >
+                        <Text style={styles.addAddressButtonText}>Add Address</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+            
+            {isEditing && !sharedAddress && (
+                <View style={styles.addressInputContainer}>
+                    <TextInput
+                        style={styles.addressInput}
+                        value={localAddress}
+                        onChangeText={setLocalAddress}
+                        placeholder="Enter your delivery address"
+                        multiline
+                        numberOfLines={4}
+                        textAlignVertical="top"
+                        autoFocus={true}
+                    />
+                    <View style={styles.addressInputActions}>
+                        <TouchableOpacity 
+                            style={styles.cancelButton}
+                            onPress={() => setIsEditing(false)}
+                        >
+                            <Text style={styles.cancelButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={[styles.saveButton, !localAddress.trim() && { opacity: 0.6 }]}
+                            onPress={handleSaveAddress}
+                            disabled={!localAddress.trim() || isSaving}
+                        >
+                            <Text style={styles.saveButtonText}>
+                                {isSaving ? 'Saving...' : 'Save Address'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
         </View>
-        <TouchableOpacity style={styles.addButton}>
-            <Text style={styles.addButtonText}>Add New Address</Text>
-        </TouchableOpacity>
-    </View>
-);
+    );
+};
 
 const NotificationsContent = () => {
     const notifications = [
@@ -149,8 +290,32 @@ const ForgotPasswordContent = () => (
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { userSession, logout } = useAuth();
+  const { address, updateAddress, isLoading: addressLoading } = useAddress();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load user data from database
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (!userSession?.uid) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const user = await userService.getUserById(userSession.uid);
+        setUserData(user);
+      } catch (error) {
+        console.error('Error loading user data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadUserData();
+  }, [userSession?.uid]);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -178,13 +343,20 @@ export default function ProfileScreen() {
     );
   };
 
-  // Create user object from session data for compatibility
+  // Handle address updates
+  const handleUpdateAddress = (newAddress: string) => {
+    // Address is automatically updated through the shared context
+    // No need to manually update userData as it will be refreshed
+  };
+
+  // Create user object from session data and database data for compatibility
   const user = userSession ? {
-    name: userSession.displayName || 'User',
+    uid: userSession.uid,
+    name: userData?.displayName || userSession.displayName || 'User',
     consumerNumber: 'HP123456789', // This should come from your user profile data
-    mobile: '+91 98765 43210', // This should come from your user profile data
+    mobile: userData?.phoneNumber || '+91 98765 43210', // This should come from your user profile data
     email: userSession.email,
-    address: '123, Main Street, Near Water Tank, Vadodara, Gujarat - 390001' // This should come from your user profile data
+    address: address // This comes from shared context
   } : null;
 
   let [fontsLoaded] = useFonts({
@@ -213,7 +385,7 @@ export default function ProfileScreen() {
   const renderModalContent = () => {
       switch(modalContent) {
           case 'personal': return <PersonalInfoContent user={user} />;
-          case 'address': return <DeliveryAddressContent user={user} />;
+          case 'address': return <DeliveryAddressContent user={user} onUpdateAddress={handleUpdateAddress} />;
           case 'notifications': return <NotificationsContent />;
           case 'help': return <HelpSupportContent />;
           case 'password': return <ChangePasswordContent onForgotPassword={() => setModalContent('forgotPassword')} />;
@@ -302,7 +474,11 @@ export default function ProfileScreen() {
         statusBarTranslucent={true}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
             <View style={[styles.modalContainer, {paddingBottom: insets.bottom + 10}]}>
                 <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>{getModalTitle()}</Text>
@@ -310,11 +486,15 @@ export default function ProfileScreen() {
                         <X size={24} color={Colors.textSecondary} />
                     </TouchableOpacity>
                 </View>
-                <View style={styles.modalContent}>
+                <ScrollView 
+                  style={styles.modalContent}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                >
                     {renderModalContent()}
-                </View>
+                </ScrollView>
             </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -473,6 +653,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
       padding: 20,
+      flexGrow: 1,
   },
   infoRow: {
       marginBottom: 16,
@@ -597,5 +778,88 @@ const styles = StyleSheet.create({
   forgotPasswordText: {
       color: Colors.primary,
       fontFamily: 'Inter_500Medium',
+  },
+  // New address styles
+  addressInput: {
+      flex: 1,
+      fontSize: 15,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.text,
+      borderWidth: 1,
+      borderColor: Colors.primary,
+      borderRadius: 8,
+      padding: 12,
+      minHeight: 100,
+      textAlignVertical: 'top',
+      backgroundColor: Colors.white,
+  },
+  addressEditContainer: {
+      flex: 1,
+      marginRight: 8,
+  },
+  emptyAddressCard: {
+      backgroundColor: Colors.background,
+      borderRadius: 12,
+      padding: 24,
+      alignItems: 'center',
+      marginBottom: 16,
+  },
+  emptyAddressText: {
+      fontSize: 16,
+      fontFamily: 'Inter_500Medium',
+      color: Colors.textSecondary,
+      marginTop: 12,
+      marginBottom: 16,
+  },
+  addAddressButton: {
+      backgroundColor: Colors.primary,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderRadius: 8,
+  },
+  addAddressButtonText: {
+      color: Colors.white,
+      fontFamily: 'Inter_600SemiBold',
+      fontSize: 14,
+  },
+  addressInputContainer: {
+      backgroundColor: Colors.background,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      marginTop: 8,
+  },
+  addressInputActions: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginTop: 16,
+  },
+  cancelButton: {
+      flex: 1,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      alignItems: 'center',
+  },
+  cancelButtonText: {
+      color: Colors.textSecondary,
+      fontFamily: 'Inter_500Medium',
+      fontSize: 14,
+  },
+  saveButton: {
+      flex: 1,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      backgroundColor: Colors.primary,
+      alignItems: 'center',
+  },
+  saveButtonText: {
+      color: Colors.white,
+      fontFamily: 'Inter_500Medium',
+      fontSize: 14,
   },
 });

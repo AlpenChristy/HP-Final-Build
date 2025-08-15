@@ -3,6 +3,7 @@ import { addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc, where } 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { FIREBASE_AUTH, FIREBASE_DB } from '../firebase/firebase';
 import { Product } from '../services/productService';
+import { PromocodeData } from '../services/promocodeService';
 
 // Define the cart item interface
 export interface CartItem {
@@ -22,6 +23,13 @@ interface CartContextType {
   removeFromCart: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;
   getCartTotal: () => number;
+  // Promocode functionality
+  appliedPromocode: PromocodeData | null;
+  discount: number;
+  setAppliedPromocode: (promocode: PromocodeData | null) => void;
+  setDiscount: (amount: number) => void;
+  clearPromocode: () => void;
+  recalculatePromocodeDiscount: () => { valid: boolean; discount?: number; error?: string };
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -29,7 +37,11 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [appliedPromocode, setAppliedPromocode] = useState<PromocodeData | null>(null);
+  const [discount, setDiscount] = useState(0);
   const auth = FIREBASE_AUTH;
+
+  console.log('CartProvider initialized with:', { cartItems: cartItems.length, loading, appliedPromocode, discount });
 
   // Fetch cart items when the component mounts or user changes
   useEffect(() => {
@@ -163,6 +175,42 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return cartItems.reduce((total, item) => total + (item.product.price * item.quantity), 0);
   };
 
+  // Clear promocode
+  const clearPromocode = () => {
+    setAppliedPromocode(null);
+    setDiscount(0);
+  };
+
+  // Recalculate promocode discount based on current cart total
+  const recalculatePromocodeDiscount = () => {
+    if (appliedPromocode) {
+      const subtotal = getCartTotal();
+      
+      // Check if promocode is still valid with current cart total
+      if (appliedPromocode.minOrderAmount && subtotal < appliedPromocode.minOrderAmount) {
+        // Cart total is below minimum order amount, remove promocode
+        clearPromocode();
+        return { valid: false, error: `Minimum order amount of ₹${appliedPromocode.minOrderAmount} required` };
+      }
+      
+      // Recalculate discount based on current cart total
+      let calculatedDiscount = 0;
+      if (appliedPromocode.discountType === 'percentage') {
+        calculatedDiscount = (subtotal * appliedPromocode.discountValue) / 100;
+        // Apply maximum discount if set
+        if (appliedPromocode.maxDiscount && calculatedDiscount > appliedPromocode.maxDiscount) {
+          calculatedDiscount = appliedPromocode.maxDiscount;
+        }
+      } else {
+        calculatedDiscount = appliedPromocode.discountValue;
+      }
+      
+      setDiscount(calculatedDiscount);
+      return { valid: true, discount: calculatedDiscount };
+    }
+    return { valid: false, error: 'No promocode applied' };
+  };
+
   return (
     <CartContext.Provider
       value={{
@@ -172,7 +220,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateQuantity,
         removeFromCart,
         clearCart,
-        getCartTotal
+        getCartTotal,
+        // Promocode functionality
+        appliedPromocode,
+        discount,
+        setAppliedPromocode,
+        setDiscount,
+        clearPromocode,
+        recalculatePromocodeDiscount
       }}
     >
       {children}
@@ -184,6 +239,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useCart = () => {
   const context = useContext(CartContext);
   if (context === undefined) {
+    console.error('CartContext is undefined. Make sure CartProvider is wrapping the component.');
     throw new Error('useCart must be used within a CartProvider');
   }
   return context;
