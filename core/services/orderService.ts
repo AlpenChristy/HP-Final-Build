@@ -1,5 +1,5 @@
 // File: core/services/orderService.ts
-import { addDoc, collection, doc, getDocs, orderBy, query, updateDoc, where, getDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { CartItem } from '../context/CartContext';
 import { FIREBASE_DB } from '../firebase/firebase';
 import { PromocodeData } from './promocodeService';
@@ -74,8 +74,7 @@ export const orderService = {
     try {
       const q = query(
         collection(FIREBASE_DB, 'orders'),
-        where('userId', '==', userId),
-        orderBy('createdAt', 'desc')
+        where('userId', '==', userId)
       );
       
       const querySnapshot = await getDocs(q);
@@ -88,7 +87,8 @@ export const orderService = {
         } as OrderData);
       });
 
-      return orders;
+      // Sort in memory instead of in the query
+      return orders.sort((a, b) => b.createdAt - a.createdAt);
     } catch (error) {
       console.error('Error getting orders by user:', error);
       throw error;
@@ -206,6 +206,32 @@ export const orderService = {
       return orders;
     } catch (error) {
       console.error('Error getting orders by status:', error);
+      throw error;
+    }
+  },
+
+  // Get orders by delivery agent ID
+  async getOrdersByDeliveryAgent(agentId: string): Promise<OrderData[]> {
+    try {
+      const q = query(
+        collection(FIREBASE_DB, 'orders'),
+        where('deliveryAgentId', '==', agentId)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const orders: OrderData[] = [];
+
+      querySnapshot.forEach((doc) => {
+        orders.push({
+          id: doc.id,
+          ...doc.data()
+        } as OrderData);
+      });
+
+      // Sort in memory instead of in the query
+      return orders.sort((a, b) => b.createdAt - a.createdAt);
+    } catch (error) {
+      console.error('Error getting orders by delivery agent:', error);
       throw error;
     }
   }

@@ -1,9 +1,16 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, CheckCircle, MapPin, Package, Phone, Truck } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ArrowLeft, CheckCircle, MapPin, Package, Phone, RefreshCw, Truck } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../core/auth/AuthContext';
+import { OrderData, orderService } from '../../core/services/orderService';
+
+// Navigation type
+interface DeliveryOrdersScreenProps {
+  navigation: any;
+}
 
 // --- Red Color Palette ---
 const Colors = {
@@ -21,132 +28,159 @@ const Colors = {
   green: '#16A34A',
 };
 
-const initialOrdersData = [
-    {
-      id: 'ORD001',
-      customer: 'John Doe',
-      phone: '+91 9876543210',
-      product: 'HP Gas 14.2kg',
-      quantity: 1,
-      amount: 880,
-      address: '123 Main Street, Apartment 4B, City - 400001',
-      orderTime: '10:30 AM',
-      status: 'Assigned',
-      distance: '2.5 km',
-    },
-    {
-      id: 'ORD002',
-      customer: 'Jane Smith',
-      phone: '+91 9876543211',
-      product: 'HP Gas 19kg',
-      quantity: 2,
-      amount: 2500,
-      address: '456 Oak Avenue, House 12, City - 400002',
-      orderTime: '11:15 AM',
-      status: 'On the Way',
-      distance: '1.8 km',
-    },
-    {
-      id: 'ORD000',
-      customer: 'Mike Johnson',
-      phone: '+91 9876543212',
-      product: 'HP Gas 14.2kg',
-      quantity: 1,
-      amount: 880,
-      address: '789 Pine Street, Flat 3A, City - 400003',
-      orderTime: '9:00 AM',
-      deliveredTime: '10:30 AM',
-      status: 'Delivered',
-    },
-];
-
-export default function DeliveryOrdersScreen({ navigation }) {
+export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScreenProps) {
   const insets = useSafeAreaInsets();
+  const { userSession } = useAuth();
   const [activeTab, setActiveTab] = useState('assigned');
-  const [orders, setOrders] = useState(initialOrdersData);
+  const [orders, setOrders] = useState<OrderData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
 
-  const assignedOrders = orders.filter(o => o.status === 'Assigned' || o.status === 'On the Way');
-  const completedOrders = orders.filter(o => o.status === 'Delivered');
+  // Fetch orders assigned to this delivery agent
+  const fetchAssignedOrders = async (isRefresh = false) => {
+    if (!userSession?.uid) return;
+    
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      
+      const assignedOrders = await orderService.getOrdersByDeliveryAgent(userSession.uid);
+      setOrders(assignedOrders);
+    } catch (error) {
+      console.error('Error fetching assigned orders:', error);
+      Alert.alert('Error', 'Failed to load assigned orders');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
-  const getStatusColor = (status) => {
+  useEffect(() => {
+    fetchAssignedOrders();
+  }, [userSession?.uid]);
+
+  const assignedOrders = orders.filter(o => 
+    o.orderStatus === 'confirmed' || o.orderStatus === 'out_for_delivery'
+  );
+  const completedOrders = orders.filter(o => o.orderStatus === 'delivered');
+
+  const getStatusColor = (status: OrderData['orderStatus']) => {
     switch (status) {
-      case 'Delivered': return Colors.green;
-      case 'On the Way': return Colors.blue;
-      case 'Assigned': return Colors.yellow;
+      case 'delivered': return Colors.green;
+      case 'out_for_delivery': return Colors.blue;
+      case 'confirmed': return Colors.yellow;
+      case 'pending': return Colors.textSecondary;
+      case 'cancelled': return Colors.textSecondary;
       default: return Colors.textSecondary;
     }
   };
 
-  const handleStatusUpdate = (orderId, newStatus) => {
-    setOrders(currentOrders =>
-        currentOrders.map(order =>
-            order.id === orderId
-                ? { ...order, status: newStatus }
-                : order
-        )
-    );
+  const getStatusDisplayText = (status: OrderData['orderStatus']) => {
+    switch (status) {
+      case 'delivered': return 'Delivered';
+      case 'out_for_delivery': return 'On the Way';
+      case 'confirmed': return 'Assigned';
+      case 'pending': return 'Pending';
+      case 'cancelled': return 'Cancelled';
+      default: return status;
+    }
   };
 
-  if (!fontsLoaded) {
-    return <View style={styles.loadingContainer} />;
+  const handleStatusUpdate = async (orderId: string, newStatus: OrderData['orderStatus']) => {
+    try {
+      await orderService.updateOrderStatus(orderId, newStatus);
+      
+      // Update local state
+      setOrders(currentOrders =>
+        currentOrders.map(order =>
+          order.id === orderId
+            ? { ...order, orderStatus: newStatus }
+            : order
+        )
+      );
+
+      Alert.alert('Success', `Order status updated to ${getStatusDisplayText(newStatus)}`);
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      Alert.alert('Error', 'Failed to update order status');
+    }
+  };
+
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
   }
 
-  const renderOrderCard = (order, showActions = true) => {
-    const statusColor = getStatusColor(order.status);
+  const renderOrderCard = (order: OrderData, showActions = true) => {
+    const statusColor = getStatusColor(order.orderStatus);
+    const firstItem = order.items[0]; // Get first item for display
+    const orderDate = new Date(order.orderDate).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
 
     return (
       <View key={order.id} style={styles.orderCard}>
         <View style={styles.orderHeader}>
           <View style={styles.orderInfo}>
             <Text style={styles.orderId}>#{order.id}</Text>
-            <Text style={styles.customerName}>{order.customer}</Text>
+            <Text style={styles.customerName}>{order.customerName}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: `${statusColor}1A` }]}>
-            <Text style={[styles.statusText, { color: statusColor }]}>{order.status}</Text>
+            <Text style={[styles.statusText, { color: statusColor }]}>
+              {getStatusDisplayText(order.orderStatus)}
+            </Text>
           </View>
         </View>
 
         <View style={styles.productInfo}>
-          <Text style={styles.productName}>{order.product} (Qty: {order.quantity})</Text>
-          <Text style={styles.amount}>₹{order.amount}</Text>
+          <Text style={styles.productName}>
+            {firstItem ? `${firstItem.product.name} (Qty: ${firstItem.quantity})` : 'No items'}
+          </Text>
+          <Text style={styles.amount}>₹{order.total}</Text>
         </View>
 
         <View style={styles.addressContainer}>
           <MapPin size={16} color={Colors.textSecondary} />
-          <Text style={styles.address}>{order.address}</Text>
+          <Text style={styles.address}>{order.deliveryAddress}</Text>
         </View>
 
         <View style={styles.contactContainer}>
           <Phone size={16} color={Colors.textSecondary} />
-          <Text style={styles.phone}>{order.phone}</Text>
-          {order.distance && (
-            <Text style={styles.distance}>{order.distance} away</Text>
-          )}
+          <Text style={styles.phone}>{order.customerPhone}</Text>
+          <Text style={styles.orderDate}>{orderDate}</Text>
         </View>
 
         {showActions && (
           <View style={styles.orderActions}>
-            {order.status === 'Assigned' && (
-                <TouchableOpacity 
-                  style={[styles.actionButton, {backgroundColor: Colors.yellow}]}
-                  onPress={() => handleStatusUpdate(order.id, 'On the Way')}
-                >
-                  <Truck size={16} color={Colors.white} />
-                  <Text style={styles.actionButtonText}>Start Delivery</Text>
-                </TouchableOpacity>
+            {order.orderStatus === 'confirmed' && (
+              <TouchableOpacity 
+                style={[styles.actionButton, {backgroundColor: Colors.yellow}]}
+                onPress={() => handleStatusUpdate(order.id!, 'out_for_delivery')}
+              >
+                <Truck size={16} color={Colors.white} />
+                <Text style={styles.actionButtonText}>Start Delivery</Text>
+              </TouchableOpacity>
             )}
-            {order.status === 'On the Way' && (
-                <TouchableOpacity 
-                  style={[styles.actionButton, {backgroundColor: Colors.primary}]}
-                  onPress={() => handleStatusUpdate(order.id, 'Delivered')}
-                >
-                  <CheckCircle size={16} color={Colors.white} />
-                  <Text style={styles.actionButtonText}>Mark Delivered</Text>
-                </TouchableOpacity>
+            {order.orderStatus === 'out_for_delivery' && (
+              <TouchableOpacity 
+                style={[styles.actionButton, {backgroundColor: Colors.primary}]}
+                onPress={() => handleStatusUpdate(order.id!, 'delivered')}
+              >
+                <CheckCircle size={16} color={Colors.white} />
+                <Text style={styles.actionButtonText}>Mark Delivered</Text>
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -168,6 +202,13 @@ export default function DeliveryOrdersScreen({ navigation }) {
             </TouchableOpacity>
             <Text style={styles.headerTitle}>My Deliveries</Text>
         </View>
+        <TouchableOpacity 
+          onPress={() => fetchAssignedOrders(true)} 
+          style={styles.headerIcon}
+          disabled={refreshing}
+        >
+          <RefreshCw size={24} color={Colors.white} style={refreshing ? {opacity: 0.5} : {}} />
+        </TouchableOpacity>
       </LinearGradient>
 
       <View style={styles.tabContainer}>
@@ -197,6 +238,7 @@ export default function DeliveryOrdersScreen({ navigation }) {
             <View style={styles.emptyState}>
               <Package size={64} color={Colors.border} />
               <Text style={styles.emptyStateText}>No assigned orders</Text>
+              <Text style={styles.emptyStateSubtext}>Orders assigned to you will appear here</Text>
             </View>
           )
         ) : (
@@ -206,6 +248,7 @@ export default function DeliveryOrdersScreen({ navigation }) {
             <View style={styles.emptyState}>
               <CheckCircle size={64} color={Colors.border} />
               <Text style={styles.emptyStateText}>No completed orders</Text>
+              <Text style={styles.emptyStateSubtext}>Your delivered orders will appear here</Text>
             </View>
           )
         )}
@@ -223,6 +266,9 @@ const styles = StyleSheet.create({
   header: {
     paddingBottom: 20,
     paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -347,7 +393,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
-  distance: {
+  orderDate: {
     fontSize: 13,
     color: Colors.blue,
     fontFamily: 'Inter_600SemiBold',
@@ -384,5 +430,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     color: Colors.textSecondary,
     marginTop: 16,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });

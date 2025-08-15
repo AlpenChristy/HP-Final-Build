@@ -1,9 +1,17 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Check, Plus, Search, User, X } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DeliveryAgent, deliveryAgentService } from '../../core/services/deliveryAgentService';
+import { OrderData, orderService } from '../../core/services/orderService';
+import { Product, getProducts } from '../../core/services/productService';
+
+// Navigation type
+interface AdminOrdersScreenProps {
+  navigation: any;
+}
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -20,161 +28,228 @@ const Colors = {
   yellow: '#F59E0B',
 };
 
-export default function AdminOrdersScreen({ navigation }) {
+export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps) {
   const insets = useSafeAreaInsets();
   const [activeMainTab, setActiveMainTab] = useState('active');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [selectedAgent, setSelectedAgent] = useState(null);
-  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [selectedOrder, setSelectedOrder] = useState<OrderData | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [orders, setOrders] = useState<OrderData[]>([]);
+  const [deliveryAgents, setDeliveryAgents] = useState<DeliveryAgent[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [newOrderData, setNewOrderData] = useState({
       customerName: '',
       phone: '',
       address: '',
-      product: null,
+      product: null as Product | null,
       quantity: '1',
   });
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
-  
-  const orders = [
-    {
-      id: 'ORD001',
-      customer: 'John Doe',
-      phone: '+91 9876543210',
-      product: 'HP Gas 14.2kg',
-      quantity: 1,
-      amount: 880,
-      status: 'Pending',
-      orderDate: '20 July 2025',
-      address: '123 Main St, City',
-      deliveryPersonId: null,
-      deliveryPerson: null,
-    },
-     {
-      id: 'ORD004',
-      customer: 'Emily White',
-      phone: '+91 9876543213',
-      product: 'HP Gas 5kg',
-      quantity: 1,
-      amount: 450,
-      status: 'Pending',
-      orderDate: '20 July 2025',
-      address: '101 Maple Ave, City',
-      deliveryPersonId: null,
-      deliveryPerson: null,
-    },
-    {
-      id: 'ORD002',
-      customer: 'Jane Smith',
-      phone: '+91 9876543211',
-      product: 'HP Gas 19kg',
-      quantity: 2,
-      amount: 2500,
-      status: 'Out for Delivery',
-      orderDate: '19 July 2025',
-      address: '456 Oak Ave, City',
-      deliveryPersonId: '1',
-      deliveryPerson: 'Raj Kumar',
-    },
-    {
-      id: 'ORD003',
-      customer: 'Mike Johnson',
-      phone: '+91 9876543212',
-      product: 'HP Gas 14.2kg',
-      quantity: 1,
-      amount: 880,
-      status: 'Delivered',
-      orderDate: '18 July 2025',
-      address: '789 Pine St, City',
-      deliveryPersonId: '2',
-      deliveryPerson: 'Amit Singh',
-    },
-  ];
 
-  const deliveryAgents = [
-      { id: '1', name: 'Raj Kumar', status: 'Available' },
-      { id: '2', name: 'Amit Singh', status: 'On Delivery' },
-      { id: '3', name: 'Suresh Patel', status: 'Available' },
-  ];
-  
-  const products = [
-      { id: '1', name: 'HP Gas 14.2kg', price: 850 },
-      { id: '2', name: 'HP Gas 19kg', price: 1200 },
-      { id: '3', name: 'HP Gas 5kg', price: 450 },
-  ];
+  // Fetch orders, delivery agents, and products
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [ordersData, agentsData, productsData] = await Promise.all([
+          orderService.getAllOrders(),
+          deliveryAgentService.getAllDeliveryAgents(),
+          getProducts()
+        ]);
+        setOrders(ordersData);
+        setDeliveryAgents(agentsData);
+        setProducts(productsData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        Alert.alert('Error', 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const activeOrders = orders.filter(o => o.status === 'Pending' || o.status === 'Out for Delivery');
-  const completedOrders = orders.filter(o => o.status === 'Delivered');
+    fetchData();
+  }, []);
+
+  // Mock data removed - using real Firebase data
+
+  const activeOrders = orders.filter(o => 
+    o.orderStatus === 'pending' || 
+    o.orderStatus === 'confirmed' || 
+    o.orderStatus === 'out_for_delivery'
+  );
+  const completedOrders = orders.filter(o => o.orderStatus === 'delivered');
 
   const filters = [
     { key: 'all', label: 'All Active', count: activeOrders.length },
-    { key: 'pending', label: 'Pending', count: activeOrders.filter(o => o.status === 'Pending').length },
-    { key: 'delivery', label: 'Out for Delivery', count: activeOrders.filter(o => o.status === 'Out for Delivery').length },
+    { key: 'pending', label: 'Pending', count: activeOrders.filter(o => o.orderStatus === 'pending').length },
+    { key: 'confirmed', label: 'Confirmed', count: activeOrders.filter(o => o.orderStatus === 'confirmed').length },
+    { key: 'delivery', label: 'Out for Delivery', count: activeOrders.filter(o => o.orderStatus === 'out_for_delivery').length },
   ];
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: OrderData['orderStatus']) => {
     switch (status) {
-      case 'Delivered': return Colors.green;
-      case 'Out for Delivery': return Colors.primary;
-      case 'Pending': return Colors.yellow;
+      case 'delivered': return Colors.green;
+      case 'out_for_delivery': return Colors.primary;
+      case 'confirmed': return Colors.primaryLight;
+      case 'pending': return Colors.yellow;
+      case 'cancelled': return Colors.textSecondary;
       default: return Colors.textSecondary;
     }
   };
 
-  const handleOrderPress = (order) => {
+  const handleOrderPress = (order: OrderData) => {
       setSelectedOrder(order);
-      setSelectedAgent(order.deliveryPersonId);
+      setSelectedAgent(order.deliveryAgentId || null);
       setDetailModalVisible(true);
   }
 
-  const handleOrderLongPress = (order) => {
-      if (order.status === 'Pending') {
+  const handleOrderLongPress = (order: OrderData) => {
+      if (order.orderStatus === 'pending') {
           setSelectedOrders(prevSelected => 
-              prevSelected.includes(order.id)
+              prevSelected.includes(order.id!)
                   ? prevSelected.filter(id => id !== order.id)
-                  : [...prevSelected, order.id]
+                  : [...prevSelected, order.id!]
           );
       }
   }
 
   const handleBulkAssignPress = () => {
-      setSelectedOrder({ id: 'multiple', customer: `${selectedOrders.length} orders selected` });
+      setSelectedOrder({ 
+          id: 'multiple',
+          customerName: `${selectedOrders.length} orders selected`,
+          orderStatus: 'pending',
+      } as OrderData);
       setSelectedAgent(null);
       setDetailModalVisible(true);
   }
+
+  const handleAssignDeliveryAgent = async (orderId: string, agentId: string, agentName: string) => {
+    try {
+      await orderService.assignDeliveryAgent(orderId, agentId, agentName);
+      // Refresh orders
+      const updatedOrders = await orderService.getAllOrders();
+      setOrders(updatedOrders);
+      setDetailModalVisible(false);
+      Alert.alert('Success', 'Delivery agent assigned successfully');
+    } catch (error) {
+      console.error('Error assigning delivery agent:', error);
+      Alert.alert('Error', 'Failed to assign delivery agent');
+    }
+  }
+
+  const handleBulkAssignment = async () => {
+    if (!selectedAgent) {
+      Alert.alert('Error', 'Please select a delivery agent');
+      return;
+    }
+
+    const agent = deliveryAgents.find(a => a.id === selectedAgent);
+    if (!agent) return;
+
+    try {
+      await Promise.all(
+        selectedOrders.map(orderId => 
+          orderService.assignDeliveryAgent(orderId, agent.id!, agent.name)
+        )
+      );
+
+      // Refresh orders
+      const updatedOrders = await orderService.getAllOrders();
+      setOrders(updatedOrders);
+      setSelectedOrders([]);
+      setDetailModalVisible(false);
+      Alert.alert('Success', 'Orders assigned successfully');
+    } catch (error) {
+      console.error('Error in bulk assignment:', error);
+      Alert.alert('Error', 'Failed to assign orders');
+    }
+  }
   
-  const handleCreateOrder = () => {
-      console.log("Creating order:", newOrderData);
+  const handleCreateOrder = async () => {
+    try {
+      if (!newOrderData.product) {
+        Alert.alert('Error', 'Please select a product');
+        return;
+      }
+
+      const orderData = {
+        userId: 'admin-created', // Special case for admin-created orders
+        customerName: newOrderData.customerName,
+        customerPhone: newOrderData.phone,
+        deliveryAddress: newOrderData.address,
+        items: [{
+          productId: newOrderData.product.id!,
+          userId: 'admin-created',
+          product: newOrderData.product,
+          quantity: parseInt(newOrderData.quantity),
+        }],
+        subtotal: newOrderData.product.price * parseInt(newOrderData.quantity),
+        deliveryCharge: newOrderData.product.deliveryCharge || 0,
+        gst: 0, // Add GST calculation if needed
+        discount: 0,
+        total: (newOrderData.product.price * parseInt(newOrderData.quantity)) + (newOrderData.product.deliveryCharge || 0),
+        paymentMethod: 'cod' as const,
+      };
+
+      await orderService.createOrder(orderData);
+      
+      // Refresh orders
+      const updatedOrders = await orderService.getAllOrders();
+      setOrders(updatedOrders);
+      
       setCreateModalVisible(false);
       // Reset form
       setNewOrderData({ customerName: '', phone: '', address: '', product: null, quantity: '1' });
+      Alert.alert('Success', 'Order created successfully');
+    } catch (error) {
+      console.error('Error creating order:', error);
+      Alert.alert('Error', 'Failed to create order');
+    }
   }
 
   const filteredActiveOrders = selectedFilter === 'all' ? activeOrders : 
     activeOrders.filter(order => {
       switch (selectedFilter) {
-        case 'pending': return order.status === 'Pending';
-        case 'delivery': return order.status === 'Out for Delivery';
+        case 'pending': return order.orderStatus === 'pending';
+        case 'confirmed': return order.orderStatus === 'confirmed';
+        case 'delivery': return order.orderStatus === 'out_for_delivery';
         default: return true;
       }
     });
 
-  if (!fontsLoaded) {
-    return <View style={styles.loadingContainer} />;
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
   }
 
-  const renderOrderList = (orderList) => (
+  const renderOrderList = (orderList: OrderData[]) => (
     orderList.map((order) => {
-        const isSelected = selectedOrders.includes(order.id);
+        const isSelected = order.id && selectedOrders.includes(order.id);
+        const firstItem = order.items[0]; // Get first item for display
+        const orderDate = new Date(order.orderDate).toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        });
+        
         return (
         <TouchableOpacity 
             key={order.id} 
-            style={[styles.orderCard, isSelected && styles.orderCardSelected, order.status === 'Delivered' && styles.completedOrderCard]} 
+            style={[
+              styles.orderCard, 
+              isSelected && styles.orderCardSelected, 
+              order.orderStatus === 'delivered' && styles.completedOrderCard
+            ]} 
             onPress={() => handleOrderPress(order)}
             onLongPress={() => handleOrderLongPress(order)}
         >
@@ -182,22 +257,26 @@ export default function AdminOrdersScreen({ navigation }) {
           <View style={styles.orderHeader}>
             <View>
               <Text style={styles.orderId}>#{order.id}</Text>
-              <Text style={styles.orderDate}>{order.orderDate}</Text>
+              <Text style={styles.orderDate}>{orderDate}</Text>
             </View>
-            <Text style={styles.orderAmount}>₹{order.amount}</Text>
+            <Text style={styles.orderAmount}>₹{order.total}</Text>
           </View>
 
           <View style={styles.customerInfo}>
-            <Text style={styles.productName}>{order.product}</Text>
-            <Text style={styles.customerName}>{order.customer}</Text>
-            <Text style={styles.customerAddress}>{order.address}</Text>
+            <Text style={styles.productName}>
+              {firstItem ? `${firstItem.product.name} (x${firstItem.quantity})` : 'No items'}
+            </Text>
+            <Text style={styles.customerName}>{order.customerName}</Text>
+            <Text style={styles.customerAddress}>{order.deliveryAddress}</Text>
           </View>
 
           <View style={styles.footer}>
             <Text style={styles.deliveryPerson}>
-                {order.deliveryPerson ? `Assigned to: ${order.deliveryPerson}` : 'Unassigned'}
+                {order.deliveryAgentName ? `Assigned to: ${order.deliveryAgentName}` : 'Unassigned'}
             </Text>
-            <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>{order.status}</Text>
+            <Text style={[styles.statusText, { color: getStatusColor(order.orderStatus) }]}>
+              {order.orderStatus.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </Text>
           </View>
         </TouchableOpacity>
         )
@@ -299,36 +378,59 @@ export default function AdminOrdersScreen({ navigation }) {
                             <>
                             <View style={styles.modalSection}>
                                 <View style={styles.modalRow}><Text style={styles.modalLabel}>Order ID:</Text><Text style={styles.modalValue}>#{selectedOrder.id}</Text></View>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Product:</Text><Text style={styles.modalValue}>{selectedOrder.product}</Text></View>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Order Date:</Text><Text style={styles.modalValue}>{selectedOrder.orderDate}</Text></View>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Amount:</Text><Text style={styles.modalValue}>₹{selectedOrder.amount}</Text></View>
+                                <View style={styles.modalRow}>
+                                  <Text style={styles.modalLabel}>Products:</Text>
+                                  <View style={{flex: 1, alignItems: 'flex-end'}}>
+                                    {selectedOrder.items.map((item, index) => (
+                                      <Text key={index} style={styles.modalValue}>
+                                        {item.product.name} (x{item.quantity}) - ₹{item.product.price * item.quantity}
+                                      </Text>
+                                    ))}
+                                  </View>
+                                </View>
+                                <View style={styles.modalRow}>
+                                  <Text style={styles.modalLabel}>Order Date:</Text>
+                                  <Text style={styles.modalValue}>
+                                    {new Date(selectedOrder.orderDate).toLocaleDateString('en-IN', {
+                                      day: 'numeric',
+                                      month: 'long',
+                                      year: 'numeric'
+                                    })}
+                                  </Text>
+                                </View>
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Subtotal:</Text><Text style={styles.modalValue}>₹{selectedOrder.subtotal}</Text></View>
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Delivery Charge:</Text><Text style={styles.modalValue}>₹{selectedOrder.deliveryCharge}</Text></View>
+                                {selectedOrder.discount > 0 && (
+                                  <View style={styles.modalRow}><Text style={styles.modalLabel}>Discount:</Text><Text style={styles.modalValue}>₹{selectedOrder.discount}</Text></View>
+                                )}
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Total Amount:</Text><Text style={[styles.modalValue, {fontFamily: 'Inter_700Bold'}]}>₹{selectedOrder.total}</Text></View>
                             </View>
                             <View style={styles.modalSection}>
                                 <Text style={styles.modalSectionTitle}>Customer Info</Text>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Name:</Text><Text style={styles.modalValue}>{selectedOrder.customer}</Text></View>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Phone:</Text><Text style={styles.modalValue}>{selectedOrder.phone}</Text></View>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Address:</Text><Text style={[styles.modalValue, {textAlign: 'right', flex: 1}]}>{selectedOrder.address}</Text></View>
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Name:</Text><Text style={styles.modalValue}>{selectedOrder.customerName}</Text></View>
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Phone:</Text><Text style={styles.modalValue}>{selectedOrder.customerPhone}</Text></View>
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Address:</Text><Text style={[styles.modalValue, {textAlign: 'right', flex: 1}]}>{selectedOrder.deliveryAddress}</Text></View>
                             </View>
                             </>
                         )}
                         
-                        {selectedOrder.status === 'Delivered' && (
+                        {selectedOrder.orderStatus === 'delivered' && (
                             <View style={styles.modalSection}>
                                 <Text style={styles.modalSectionTitle}>Delivery Details</Text>
                                 <View style={styles.modalRow}>
                                     <Text style={styles.modalLabel}>Delivered by:</Text>
-                                    <Text style={styles.modalValue}>{selectedOrder.deliveryPerson}</Text>
+                                    <Text style={styles.modalValue}>{selectedOrder.deliveryAgentName}</Text>
                                 </View>
                             </View>
                         )}
 
-                        {(selectedOrder.status === 'Pending' || selectedOrder.status === 'Out for Delivery' || selectedOrder.id === 'multiple') && (
+                        {(selectedOrder.orderStatus === 'pending' || selectedOrder.orderStatus === 'out_for_delivery' || selectedOrder.id === 'multiple') && (
                             <View style={styles.modalSection}>
                                 <Text style={styles.modalSectionTitle}>
                                     {selectedOrder.id === 'multiple' ? `Assign Agent to ${selectedOrders.length} Orders` : 'Assign Delivery Agent'}
                                 </Text>
                                 {deliveryAgents.map(agent => (
-                                    <TouchableOpacity key={agent.id} style={styles.agentRow} onPress={() => setSelectedAgent(agent.id)}>
+                                    <TouchableOpacity key={agent.id} style={styles.agentRow} onPress={() => setSelectedAgent(agent.id || null)}>
                                         <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
                                             <User size={18} color={Colors.textSecondary} />
                                             <Text style={styles.agentName}>{agent.name}</Text>
@@ -342,11 +444,34 @@ export default function AdminOrdersScreen({ navigation }) {
                         )}
                     </ScrollView>
                 )}
-                {(selectedOrder?.status === 'Pending' || selectedOrder?.status === 'Out for Delivery' || selectedOrder?.id === 'multiple') && (
+                {(selectedOrder?.orderStatus === 'pending' || 
+                  selectedOrder?.orderStatus === 'confirmed' || 
+                  selectedOrder?.orderStatus === 'out_for_delivery' || 
+                  selectedOrder?.id === 'multiple') && (
                     <View style={styles.modalFooter}>
-                        <TouchableOpacity style={styles.assignButton}>
+                        <TouchableOpacity 
+                          style={[styles.assignButton, !selectedAgent && styles.assignButtonDisabled]}
+                          onPress={() => {
+                            if (!selectedAgent) {
+                              Alert.alert('Error', 'Please select a delivery agent');
+                              return;
+                            }
+                            const agent = deliveryAgents.find(a => a.id === selectedAgent);
+                            if (!agent) return;
+
+                            if (selectedOrder.id === 'multiple') {
+                              handleBulkAssignment();
+                            } else if (selectedOrder.id) {
+                              handleAssignDeliveryAgent(selectedOrder.id, agent.id!, agent.name);
+                            }
+                          }}
+                        >
                             <Text style={styles.assignButtonText}>
-                                {selectedOrder?.status === 'Out for Delivery' ? 'Update Assignment' : 'Confirm Assignment'}
+                                {selectedOrder?.orderStatus === 'out_for_delivery' 
+                                  ? 'Update Assignment' 
+                                  : selectedOrder?.id === 'multiple'
+                                  ? 'Assign to Selected Orders'
+                                  : 'Confirm Assignment'}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -761,6 +886,10 @@ const styles = StyleSheet.create({
       borderRadius: 12,
       alignItems: 'center',
       flex: 1,
+  },
+  assignButtonDisabled: {
+      backgroundColor: Colors.textSecondary,
+      opacity: 0.7,
   },
   assignButtonText: {
       color: Colors.white,

@@ -1,9 +1,11 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, CheckCircle, Clock, Package, Truck, X } from 'lucide-react-native';
-import React, { useState, useEffect } from 'react';
-import { Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../core/auth/AuthContext';
+import { OrderData, orderService } from '../../core/services/orderService';
 
 // --- Color Palette (Matched with ProductsScreen) ---
 const Colors = {
@@ -20,119 +22,125 @@ const Colors = {
   yellow: '#F59E0B',
 };
 
-// --- Mock Order Data ---
-const currentOrders = [
-    {
-      id: 'ORD001',
-      product: 'HP Gas 14.2kg',
-      quantity: 1,
-      basePrice: 807.5,
-      gst: 42.5,
-      deliveryCharge: 30,
-      total: 880,
-      status: 'Out for Delivery',
-      orderedOn: '20 July 2025',
-      expectedDelivery: '20 July 2025',
-      paymentMode: 'Credit Card',
-      address: '123 Main Street, Apartment 4B, City - 400001',
-      customerName: 'Alpen Bhai',
-      lpgId: '1234567890',
-      mobileNumber: '+91 98765 43210',
-      bookingRef: 'BKNGREF12345',
-      distributorName: 'Anil Gas Agency',
-      distributorCode: 'D-VAD-101',
-      transactionId: 'TXN123456789',
-      paymentStatus: 'Paid',
-      paymentDate: '20 July 2025, 10:31 AM',
-      distributorContact: '+91 265 234 5678',
-      helplineNumber: '1800-2333-555',
-      trackingSteps: [
-        { step: 'Order Placed', completed: true, time: '10:30 AM' },
-        { step: 'Confirmed', completed: true, time: '10:45 AM' },
-        { step: 'Out for Delivery', completed: true, time: '2:00 PM' },
-        { step: 'Delivered', completed: false, time: 'Expected by 4:00 PM' },
-      ],
-    },
-    {
-      id: 'ORD002',
-      product: 'HP Gas 5kg',
-      quantity: 2,
-      basePrice: 450,
-      gst: 22.5,
-      deliveryCharge: 40,
-      total: 962.5,
-      status: 'Confirmed',
-      orderedOn: '20 July 2025',
-      expectedDelivery: '21 July 2025',
-      paymentMode: 'Cash on Delivery',
-      address: '456 Oak Avenue, House 12, City - 400002',
-      customerName: 'Alpen Bhai',
-      lpgId: '1234567890',
-      mobileNumber: '+91 98765 43210',
-      bookingRef: 'BKNGREF12346',
-      distributorName: 'Anil Gas Agency',
-      distributorCode: 'D-VAD-101',
-      transactionId: 'N/A',
-      paymentStatus: 'Pending',
-      paymentDate: 'N/A',
-      distributorContact: '+91 265 234 5678',
-      helplineNumber: '1800-2333-555',
-      trackingSteps: [
-        { step: 'Order Placed', completed: true, time: '11:00 AM' },
-        { step: 'Confirmed', completed: true, time: '11:15 AM' },
-        { step: 'Out for Delivery', completed: false, time: 'Tomorrow' },
-        { step: 'Delivered', completed: false, time: '' },
-      ],
-    },
-];
+interface TrackingStep {
+  step: string;
+  completed: boolean;
+  time: string;
+}
 
-const orderHistory = [
-    {
-      id: 'ORD000',
-      product: 'HP Gas 14.2kg',
-      quantity: 1,
-      basePrice: 807.5,
-      gst: 42.5,
-      deliveryCharge: 30,
-      total: 880,
-      status: 'Delivered',
-      orderedOn: '15 July 2025',
-      deliveredOn: '15 July 2025',
-      paymentMode: 'Credit Card',
-      address: '123 Main Street, Apartment 4B, City - 400001',
-      customerName: 'Alpen Bhai',
-      lpgId: '1234567890',
-      mobileNumber: '+91 98765 43210',
-      bookingRef: 'BKNGREF12344',
-      distributorName: 'Anil Gas Agency',
-      distributorCode: 'D-VAD-101',
-      transactionId: 'TXN0987654321',
-      paymentStatus: 'Paid',
-      paymentDate: '15 July 2025, 09:15 AM',
-      distributorContact: '+91 265 234 5678',
-      helplineNumber: '1800-2333-555',
-    },
-];
+interface ExtendedOrderData extends OrderData {
+  trackingSteps?: TrackingStep[];
+}
 
-const getStatusInfo = (status) => {
+const getTrackingSteps = (order: OrderData): TrackingStep[] => {
+  const steps: TrackingStep[] = [];
+  const orderDate = new Date(order.orderDate);
+  const deliveredAt = order.deliveredAt ? new Date(order.deliveredAt) : null;
+  const expectedDelivery = order.expectedDelivery ? new Date(order.expectedDelivery) : null;
+
+  // Order Placed
+  steps.push({
+    step: 'Order Placed',
+    completed: true,
+    time: orderDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })
+  });
+
+  // Confirmed
+  if (order.orderStatus !== 'pending') {
+    steps.push({
+      step: 'Confirmed',
+      completed: true,
+      time: new Date(order.updatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })
+    });
+  } else {
+    steps.push({ step: 'Confirmed', completed: false, time: 'Pending' });
+  }
+
+  // Out for Delivery
+  if (order.orderStatus === 'out_for_delivery' || order.orderStatus === 'delivered') {
+    steps.push({
+      step: 'Out for Delivery',
+      completed: true,
+      time: new Date(order.updatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })
+    });
+  } else {
+    steps.push({
+      step: 'Out for Delivery',
+      completed: false,
+      time: expectedDelivery ? 'Expected ' + expectedDelivery.toLocaleDateString() : 'Pending'
+    });
+  }
+
+  // Delivered
+  if (order.orderStatus === 'delivered' && deliveredAt) {
+    steps.push({
+      step: 'Delivered',
+      completed: true,
+      time: deliveredAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })
+    });
+  } else {
+    steps.push({
+      step: 'Delivered',
+      completed: false,
+      time: expectedDelivery ? 'Expected by ' + expectedDelivery.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) : 'Pending'
+    });
+  }
+
+  return steps;
+};
+
+const getStatusInfo = (status: OrderData['orderStatus']) => {
     switch (status) {
-      case 'Delivered':
+      case 'delivered':
         return { Icon: CheckCircle, color: Colors.green };
-      case 'Out for Delivery':
+      case 'out_for_delivery':
         return { Icon: Truck, color: Colors.primary };
-      case 'Confirmed':
+      case 'confirmed':
         return { Icon: Package, color: Colors.yellow };
+      case 'pending':
+        return { Icon: Clock, color: Colors.textSecondary };
+      case 'cancelled':
+        return { Icon: X, color: Colors.textSecondary };
       default:
         return { Icon: Clock, color: Colors.textSecondary };
     }
-};
+  };
 
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
+  const { userSession } = useAuth();
   const [activeTab, setActiveTab] = useState('current');
   const [invoiceVisible, setInvoiceVisible] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState<ExtendedOrderData | null>(null);
+  const [orders, setOrders] = useState<ExtendedOrderData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch orders
+  useEffect(() => {
+    const fetchOrders = async () => {
+      if (!userSession?.uid) return;
+      
+      try {
+        setLoading(true);
+        const userOrders = await orderService.getOrdersByUser(userSession.uid);
+        
+        // Add tracking steps to each order
+        const ordersWithTracking = userOrders.map(order => ({
+          ...order,
+          trackingSteps: getTrackingSteps(order)
+        }));
+        
+        setOrders(ordersWithTracking);
+      } catch (error) {
+        console.error('Error fetching orders:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, [userSession?.uid]);
 
   // Set initial tab based on URL parameter
   useEffect(() => {
@@ -147,48 +155,79 @@ export default function OrdersScreen() {
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,
   });
 
-  if (!fontsLoaded) {
-    return <View style={styles.loadingContainer} />;
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
   }
 
-  const handleViewInvoice = (order) => {
+  const currentOrders = orders.filter(o => 
+    o.orderStatus === 'pending' || 
+    o.orderStatus === 'confirmed' || 
+    o.orderStatus === 'out_for_delivery'
+  );
+  const orderHistory = orders.filter(o => o.orderStatus === 'delivered');
+
+  const handleViewInvoice = (order: ExtendedOrderData) => {
     setSelectedOrder(order);
     setInvoiceVisible(true);
   };
 
-  const renderOrderCard = (order, showTracking = false) => {
-    const { Icon, color } = getStatusInfo(order.status);
+  const renderOrderCard = (order: ExtendedOrderData, showTracking = false) => {
+    const { Icon, color } = getStatusInfo(order.orderStatus);
+    const firstItem = order.items[0]; // Get first item for display
+    const orderDate = new Date(order.orderDate).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
 
     return (
       <View key={order.id} style={styles.orderCard}>
         <View style={styles.orderHeader}>
           <View style={styles.orderInfo}>
             <Text style={styles.orderId}>#{order.id}</Text>
-            <Text style={styles.productName}>{order.product} (x{order.quantity})</Text>
+            <Text style={styles.productName}>
+              {firstItem ? `${firstItem.product.name} (x${firstItem.quantity})` : 'No items'}
+            </Text>
           </View>
           <View style={[styles.statusContainer, { backgroundColor: `${color}1A` }]}>
             <Icon size={16} color={color} />
-            <Text style={[styles.status, { color: color }]}>{order.status}</Text>
+            <Text style={[styles.status, { color: color }]}>
+              {order.orderStatus.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </Text>
           </View>
         </View>
 
         <View style={styles.orderDetails}>
-          {order.orderedOn && (
-            <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Ordered on:</Text>
-                <Text style={styles.detailValue}>{order.orderedOn}</Text>
-            </View>
-          )}
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Ordered on:</Text>
+            <Text style={styles.detailValue}>{orderDate}</Text>
+          </View>
           {order.expectedDelivery && (
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Expected delivery:</Text>
-              <Text style={styles.detailValue}>{order.expectedDelivery}</Text>
+              <Text style={styles.detailValue}>
+                {new Date(order.expectedDelivery).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })}
+              </Text>
             </View>
           )}
-          {order.deliveredOn && (
+          {order.deliveredAt && (
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Delivered on:</Text>
-              <Text style={styles.detailValue}>{order.deliveredOn}</Text>
+              <Text style={styles.detailValue}>
+                {new Date(order.deliveredAt).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })}
+              </Text>
             </View>
           )}
           <View style={styles.detailRow}>
@@ -205,11 +244,11 @@ export default function OrdersScreen() {
 
         {showTracking && order.trackingSteps && (
           <View style={styles.trackingContainer}>
-            {order.trackingSteps.map((step, index) => (
+            {order.trackingSteps.map((step: TrackingStep, index: number) => (
               <View key={index} style={styles.trackingStep}>
                 <View style={styles.trackingLineContainer}>
                     <View style={[styles.trackingDot, step.completed && styles.trackingDotCompleted]} />
-                    {index < order.trackingSteps.length - 1 && <View style={[styles.trackingLine, step.completed && styles.trackingLineCompleted]} />}
+                    {index < order.trackingSteps!.length - 1 && <View style={[styles.trackingLine, step.completed && styles.trackingLineCompleted]} />}
                 </View>
                 <View style={styles.trackingContent}>
                   <Text style={[styles.trackingStepText, step.completed && styles.trackingStepCompleted]}>
@@ -302,45 +341,90 @@ export default function OrdersScreen() {
                         <View style={styles.invoiceSection}>
                             <Text style={styles.invoiceSectionTitle}>Customer Details</Text>
                             <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Name:</Text><Text style={styles.invoiceValue}>{selectedOrder.customerName}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>LPG ID:</Text><Text style={styles.invoiceValue}>{selectedOrder.lpgId}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Mobile:</Text><Text style={styles.invoiceValue}>{selectedOrder.mobileNumber}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Address:</Text><Text style={[styles.invoiceValue, {textAlign: 'right', flex: 1}]}>{selectedOrder.address}</Text></View>
+                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Phone:</Text><Text style={styles.invoiceValue}>{selectedOrder.customerPhone}</Text></View>
+                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Address:</Text><Text style={[styles.invoiceValue, {textAlign: 'right', flex: 1}]}>{selectedOrder.deliveryAddress}</Text></View>
                         </View>
 
-                        {/* Booking Details */}
+                        {/* Order Details */}
                         <View style={styles.invoiceSection}>
-                            <Text style={styles.invoiceSectionTitle}>Booking Details</Text>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Booking Date:</Text><Text style={styles.invoiceValue}>{selectedOrder.orderedOn}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Delivery Date:</Text><Text style={styles.invoiceValue}>{selectedOrder.deliveredOn || selectedOrder.expectedDelivery}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Booking Ref No:</Text><Text style={styles.invoiceValue}>{selectedOrder.bookingRef}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Distributor:</Text><Text style={styles.invoiceValue}>{selectedOrder.distributorName} ({selectedOrder.distributorCode})</Text></View>
+                            <Text style={styles.invoiceSectionTitle}>Order Details</Text>
+                            <View style={styles.invoiceRow}>
+                              <Text style={styles.invoiceLabel}>Order Date:</Text>
+                              <Text style={styles.invoiceValue}>
+                                {new Date(selectedOrder.orderDate).toLocaleDateString('en-IN', {
+                                  day: 'numeric',
+                                  month: 'long',
+                                  year: 'numeric'
+                                })}
+                              </Text>
+                            </View>
+                            {selectedOrder.expectedDelivery && (
+                              <View style={styles.invoiceRow}>
+                                <Text style={styles.invoiceLabel}>Expected Delivery:</Text>
+                                <Text style={styles.invoiceValue}>
+                                  {new Date(selectedOrder.expectedDelivery).toLocaleDateString('en-IN', {
+                                    day: 'numeric',
+                                    month: 'long',
+                                    year: 'numeric'
+                                  })}
+                                </Text>
+                              </View>
+                            )}
+                            {selectedOrder.deliveryAgentName && (
+                              <View style={styles.invoiceRow}>
+                                <Text style={styles.invoiceLabel}>Delivery Agent:</Text>
+                                <Text style={styles.invoiceValue}>{selectedOrder.deliveryAgentName}</Text>
+                              </View>
+                            )}
                         </View>
 
                         {/* Price Breakdown */}
                         <View style={styles.invoiceSection}>
                             <Text style={styles.invoiceSectionTitle}>Price Breakdown</Text>
-                            <View style={styles.itemHeader}><Text style={styles.itemHeaderText}>Item</Text><Text style={styles.itemHeaderText}>Amount</Text></View>
-                            <View style={styles.itemRow}><Text style={styles.invoiceItem}>{selectedOrder.product} (x{selectedOrder.quantity})</Text><Text style={styles.invoiceItem}>₹{selectedOrder.basePrice * selectedOrder.quantity}</Text></View>
-                            <View style={styles.itemRow}><Text style={styles.invoiceItem}>GST</Text><Text style={styles.invoiceItem}>₹{selectedOrder.gst}</Text></View>
-                            <View style={styles.itemRow}><Text style={styles.invoiceItem}>Delivery Charge</Text><Text style={styles.invoiceItem}>₹{selectedOrder.deliveryCharge}</Text></View>
+                            <View style={styles.itemHeader}>
+                              <Text style={styles.itemHeaderText}>Item</Text>
+                              <Text style={styles.itemHeaderText}>Amount</Text>
+                            </View>
+                            {selectedOrder.items.map((item, index) => (
+                              <View key={index} style={styles.itemRow}>
+                                <Text style={styles.invoiceItem}>
+                                  {item.product.name} (x{item.quantity})
+                                </Text>
+                                <Text style={styles.invoiceItem}>
+                                  ₹{item.product.price * item.quantity}
+                                </Text>
+                              </View>
+                            ))}
+                            <View style={styles.itemRow}>
+                              <Text style={styles.invoiceItem}>Delivery Charge</Text>
+                              <Text style={styles.invoiceItem}>₹{selectedOrder.deliveryCharge}</Text>
+                            </View>
+                            {selectedOrder.gst > 0 && (
+                              <View style={styles.itemRow}>
+                                <Text style={styles.invoiceItem}>GST</Text>
+                                <Text style={styles.invoiceItem}>₹{selectedOrder.gst}</Text>
+                              </View>
+                            )}
+                            {selectedOrder.discount > 0 && (
+                              <View style={styles.itemRow}>
+                                <Text style={styles.invoiceItem}>Discount</Text>
+                                <Text style={styles.invoiceItem}>-₹{selectedOrder.discount}</Text>
+                              </View>
+                            )}
                             <View style={styles.invoiceDivider} />
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceTotalLabel}>Total Amount</Text><Text style={styles.invoiceTotalValue}>₹{selectedOrder.total}</Text></View>
+                            <View style={styles.invoiceRow}>
+                              <Text style={styles.invoiceTotalLabel}>Total Amount</Text>
+                              <Text style={styles.invoiceTotalValue}>₹{selectedOrder.total}</Text>
+                            </View>
                         </View>
 
                         {/* Payment Details */}
                         <View style={styles.invoiceSection}>
                             <Text style={styles.invoiceSectionTitle}>Payment Details</Text>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Payment Mode:</Text><Text style={styles.invoiceValue}>{selectedOrder.paymentMode}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Transaction ID:</Text><Text style={styles.invoiceValue}>{selectedOrder.transactionId}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Payment Status:</Text><Text style={[styles.invoiceValue, {color: selectedOrder.paymentStatus === 'Paid' ? Colors.green : Colors.yellow}]}>{selectedOrder.paymentStatus}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Date of Payment:</Text><Text style={styles.invoiceValue}>{selectedOrder.paymentDate}</Text></View>
-                        </View>
-
-                        {/* Other Information */}
-                        <View style={styles.invoiceSection}>
-                            <Text style={styles.invoiceSectionTitle}>Other Information</Text>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Distributor Contact:</Text><Text style={styles.invoiceValue}>{selectedOrder.distributorContact}</Text></View>
-                            <View style={styles.invoiceRow}><Text style={styles.invoiceLabel}>Consumer Helpline:</Text><Text style={styles.invoiceValue}>{selectedOrder.helplineNumber}</Text></View>
+                            <View style={styles.invoiceRow}>
+                              <Text style={styles.invoiceLabel}>Payment Mode:</Text>
+                              <Text style={styles.invoiceValue}>{selectedOrder.paymentMethod}</Text>
+                            </View>
                         </View>
                     </ScrollView>
                 )}
