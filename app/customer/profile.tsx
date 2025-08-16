@@ -6,6 +6,7 @@ import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StatusBar, St
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useAddress } from '../../core/context/AddressContext';
+import { orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
 
 // --- Color Palette (Matched with other pages) ---
@@ -295,26 +296,54 @@ export default function ProfileScreen() {
   const [modalContent, setModalContent] = useState('');
   const [userData, setUserData] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [orderStats, setOrderStats] = useState({
+    totalOrders: 0,
+    activeOrders: 0
+  });
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Load user data from database
+  // Load user data and order statistics from database
+  const loadUserDataAndStats = async (isRefresh = false) => {
+    if (!userSession?.uid) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+
+      // Load user data
+      const user = await userService.getUserById(userSession.uid);
+      setUserData(user);
+
+      // Load order statistics
+      const userOrders = await orderService.getOrdersByUser(userSession.uid);
+      
+      const totalOrders = userOrders.length;
+      const activeOrders = userOrders.filter(order => 
+        order.orderStatus === 'pending' || 
+        order.orderStatus === 'confirmed' || 
+        order.orderStatus === 'out_for_delivery'
+      ).length;
+
+      setOrderStats({
+        totalOrders,
+        activeOrders
+      });
+    } catch (error) {
+      console.error('Error loading user data and stats:', error);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    const loadUserData = async () => {
-      if (!userSession?.uid) {
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const user = await userService.getUserById(userSession.uid);
-        setUserData(user);
-      } catch (error) {
-        console.error('Error loading user data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadUserData();
+    loadUserDataAndStats();
   }, [userSession?.uid]);
 
   const handleLogout = async () => {
@@ -418,11 +447,15 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.statsContainer}>
             <View style={styles.statCard}>
-                <Text style={styles.statNumber}>12</Text>
+                <Text style={styles.statNumber}>
+                  {refreshing ? '...' : orderStats.totalOrders}
+                </Text>
                 <Text style={styles.statLabel}>Total Orders</Text>
             </View>
             <View style={styles.statCard}>
-                <Text style={styles.statNumber}>2</Text>
+                <Text style={styles.statNumber}>
+                  {refreshing ? '...' : orderStats.activeOrders}
+                </Text>
                 <Text style={styles.statLabel}>Active Orders</Text>
             </View>
         </View>
@@ -517,6 +550,7 @@ const styles = StyleSheet.create({
     padding: 4,
     marginRight: 16,
   },
+
   profileSection: {},
   headerTitleText: {
     fontSize: 20,

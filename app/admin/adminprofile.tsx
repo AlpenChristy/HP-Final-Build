@@ -173,7 +173,7 @@ const PromocodeContent = ({ setModalView, setEditingPromocode, promocodes, onDel
         if (promocode.discountType === 'percentage') {
             return `${promocode.discountValue}% off`;
         } else {
-            return `$${promocode.discountValue} off`;
+            return `₹${promocode.discountValue} off`;
         }
     };
 
@@ -198,6 +198,11 @@ const PromocodeContent = ({ setModalView, setEditingPromocode, promocodes, onDel
                         </Text>
                         {promocode.description && (
                             <Text style={styles.promocodeDescription}>{promocode.description}</Text>
+                        )}
+                        {promocode.showOnHome && (
+                            <View style={styles.homeBadge}>
+                                <Text style={styles.homeBadgeText}>🏠 Home Page</Text>
+                            </View>
                         )}
                     </View>
                     <View style={styles.promocodeActions}>
@@ -234,6 +239,7 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
         validUntil: '',
         isActive: true,
         description: '',
+        showOnHome: false,
     });
     const [isLoading, setIsLoading] = useState(false);
 
@@ -251,6 +257,7 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
                 validUntil: editingPromocode.validUntil ? new Date(editingPromocode.validUntil).toISOString().split('T')[0] : '',
                 isActive: editingPromocode.isActive ?? true,
                 description: editingPromocode.description || '',
+                showOnHome: editingPromocode.showOnHome ?? false,
             });
         } else {
             // Reset form for new promocode
@@ -265,6 +272,7 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
                 validUntil: '',
                 isActive: true,
                 description: '',
+                showOnHome: false,
             });
         }
     }, [editingPromocode]);
@@ -311,6 +319,7 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
                 validUntil: new Date(formData.validUntil),
                 isActive: formData.isActive,
                 description: formData.description.trim(),
+                showOnHome: formData.showOnHome,
                 isEdit: !!editingPromocode,
                 id: editingPromocode?.id,
             });
@@ -436,6 +445,19 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
                 <Switch 
                     value={formData.isActive} 
                     onValueChange={(value) => setFormData({...formData, isActive: value})} 
+                    trackColor={{false: Colors.border, true: Colors.primaryLight}} 
+                    thumbColor={Colors.white} 
+                />
+            </View>
+
+            <View style={styles.permissionRow}>
+                <Text style={styles.permissionLabel}>Show on Home Page</Text>
+                <Switch 
+                    value={formData.showOnHome || false} 
+                    onValueChange={(value) => {
+                        console.log('Toggle changed to:', value);
+                        setFormData({...formData, showOnHome: value});
+                    }} 
                     trackColor={{false: Colors.border, true: Colors.primaryLight}} 
                     thumbColor={Colors.white} 
                 />
@@ -744,6 +766,9 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         if (data.description !== undefined && data.description !== null && data.description.trim() !== '') {
           updateData.description = data.description;
         }
+        if (data.showOnHome !== undefined) {
+          updateData.showOnHome = data.showOnHome;
+        }
 
         await promocodeService.updatePromocode(data.id, updateData);
         Alert.alert('Success', 'Promocode updated successfully!');
@@ -769,6 +794,9 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         }
         if (data.description !== undefined && data.description !== null && data.description.trim() !== '') {
           createData.description = data.description;
+        }
+        if (data.showOnHome !== undefined) {
+          createData.showOnHome = data.showOnHome;
         }
 
         await promocodeService.createPromocode(userSession.uid, createData);
@@ -1238,6 +1266,19 @@ const styles = StyleSheet.create({
   promocodeActions: {
       flexDirection: 'row',
       gap: 16,
+  },
+  homeBadge: {
+      backgroundColor: Colors.primaryLighter,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      alignSelf: 'flex-start',
+      marginTop: 4,
+  },
+  homeBadgeText: {
+      fontSize: 12,
+      fontFamily: 'Inter_500Medium',
+      color: Colors.primary,
   },
   radioGroup: {
       flexDirection: 'row',

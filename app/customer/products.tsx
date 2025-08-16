@@ -1,17 +1,17 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
-import { ArrowLeft, Minus, Plus, Search, ShoppingCart, SlidersHorizontal, X } from 'lucide-react-native';
+import { ArrowLeft, Check, Minus, Plus, Search, ShoppingCart, SlidersHorizontal, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  Image,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Image,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../core/context/CartContext';
@@ -37,11 +37,17 @@ const Colors = {
 
 export default function ProductsScreen() {
   const insets = useSafeAreaInsets();
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalQuantity, setModalQuantity] = useState(1); // Default quantity to 1
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Filter states
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [selectedType, setSelectedType] = useState('');
+  const [priceRange, setPriceRange] = useState({ min: '', max: '' });
+  const [sortBy, setSortBy] = useState('name'); // 'name', 'priceLow', 'priceHigh'
+  const [availableTypes, setAvailableTypes] = useState<string[]>([]);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +65,10 @@ export default function ProductsScreen() {
         setLoading(true);
         const productsData = await getProducts();
         setProducts(productsData);
+        
+        // Extract unique product types for filter options
+        const types = [...new Set(productsData.map(product => product.type))];
+        setAvailableTypes(types);
       } catch (error) {
         console.error('Error fetching products:', error);
         // Handle error (show error message)
@@ -80,7 +90,7 @@ export default function ProductsScreen() {
     return <View style={styles.loadingContainer} />;
   }
 
-  const openProductModal = (product) => {
+  const openProductModal = (product: Product) => {
     setSelectedProduct(product);
     // Check if product is already in cart and set modal quantity accordingly
     const existingCartItem = cartItems.find(item => item.productId === product.id);
@@ -94,7 +104,7 @@ export default function ProductsScreen() {
     setSelectedProduct(null);
   };
 
-  const adjustModalQuantity = (type) => {
+  const adjustModalQuantity = (type: 'increase' | 'decrease') => {
     if (type === 'increase') {
       setModalQuantity(prev => prev + 1);
     } else if (type === 'decrease') {
@@ -108,13 +118,73 @@ export default function ProductsScreen() {
     return (selectedProduct.price * modalQuantity);
   };
 
-  const handleAddToCartDirectly = (product) => {
+  const handleAddToCartDirectly = (product: Product) => {
     addToCart(product, 1); // Add 1 quantity directly
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const openFilterModal = () => {
+    setFilterModalVisible(true);
+  };
+
+  const closeFilterModal = () => {
+    setFilterModalVisible(false);
+  };
+
+  const applyFilters = () => {
+    closeFilterModal();
+  };
+
+  const clearFilters = () => {
+    setSelectedType('');
+    setPriceRange({ min: '', max: '' });
+    setSortBy('name');
+  };
+
+  const getActiveFiltersCount = () => {
+    let count = 0;
+    if (selectedType) count++;
+    if (priceRange.min || priceRange.max) count++;
+    if (sortBy !== 'name') count++;
+    return count;
+  };
+
+  // Filter and sort products
+  const getFilteredAndSortedProducts = () => {
+    let filtered = products.filter(product => {
+      // Hide unavailable products
+      if (!product.inStock) return false;
+      
+      // Search filter
+      const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           product.description.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Type filter
+      const matchesType = !selectedType || product.type === selectedType;
+      
+      // Price range filter
+      const matchesPriceRange = (!priceRange.min || product.price >= parseFloat(priceRange.min)) &&
+                               (!priceRange.max || product.price <= parseFloat(priceRange.max));
+      
+      return matchesSearch && matchesType && matchesPriceRange;
+    });
+
+    // Sort products
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'priceLow':
+          return a.price - b.price;
+        case 'priceHigh':
+          return b.price - a.price;
+        case 'name':
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    });
+
+    return filtered;
+  };
+
+  const filteredProducts = getFilteredAndSortedProducts();
 
   return (
     <View style={styles.container}>
@@ -152,43 +222,55 @@ export default function ProductsScreen() {
               onChangeText={setSearchQuery}
             />
           </View>
-          <TouchableOpacity style={styles.filterIcon}>
-            <SlidersHorizontal size={20} color={Colors.textSecondary} />
+          <TouchableOpacity style={styles.filterIcon} onPress={openFilterModal}>
+            <View style={styles.filterIconContainer}>
+              <SlidersHorizontal size={20} color={Colors.textSecondary} />
+              {getActiveFiltersCount() > 0 && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>{getActiveFiltersCount()}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {filteredProducts.map((product) => (
-          <TouchableOpacity
-            key={product.id}
-            style={[styles.productCard, !product.inStock && styles.outOfStockCard]}
-            onPress={() => product.inStock && openProductModal(product)}
-            disabled={!product.inStock}
-          >
-            <Image source={{ uri: product.image }} style={styles.productImage} />
-            <View style={styles.productInfo}>
-              <Text style={styles.productName}>{product.name}</Text>
-              <Text style={styles.productDescription} numberOfLines={2}>{product.description}</Text>
-              <View style={styles.priceContainer}>
-                <Text style={styles.price}>₹{product.price}</Text>
-                {product.originalPrice && <Text style={styles.originalPrice}>₹{product.originalPrice}</Text>}
+        {filteredProducts.length > 0 ? (
+          filteredProducts.map((product) => (
+            <TouchableOpacity
+              key={product.id}
+              style={styles.productCard}
+              onPress={() => openProductModal(product)}
+            >
+              <Image source={{ uri: product.image }} style={styles.productImage} />
+              <View style={styles.productInfo}>
+                <Text style={styles.productName}>{product.name}</Text>
+                <Text style={styles.productDescription} numberOfLines={2}>{product.description}</Text>
+                <View style={styles.priceContainer}>
+                  <Text style={styles.price}>₹{product.price}</Text>
+                  {product.originalPrice && <Text style={styles.originalPrice}>₹{product.originalPrice}</Text>}
+                </View>
               </View>
-            </View>
-            {product.inStock ? (
               <TouchableOpacity 
                 style={styles.cartButton}
                 onPress={() => handleAddToCartDirectly(product)}
               >
                 <ShoppingCart size={20} color={Colors.white} />
               </TouchableOpacity>
-            ) : (
-              <View style={styles.outOfStockBadge}>
-                <Text style={styles.outOfStockText}>Unavailable</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
+            </TouchableOpacity>
+          ))
+        ) : (
+          <View style={styles.noProductsContainer}>
+            <Text style={styles.noProductsTitle}>No products found</Text>
+            <Text style={styles.noProductsSubtitle}>
+              Try adjusting your search or filters to find what you're looking for.
+            </Text>
+            <TouchableOpacity style={styles.clearFiltersButtonInline} onPress={clearFilters}>
+              <Text style={styles.clearFiltersTextInline}>Clear All Filters</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       {/* --- REFINED Product Details Modal --- */}
@@ -249,6 +331,116 @@ export default function ProductsScreen() {
                 </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- REFINED FILTER MODAL --- */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={filterModalVisible}
+        statusBarTranslucent={true}
+        onRequestClose={closeFilterModal}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={closeFilterModal} />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHandle} />
+            <View style={styles.filterModalHeader}>
+              <Text style={styles.filterModalTitle}>Filters</Text>
+              <TouchableOpacity onPress={clearFilters} style={styles.clearFiltersButton}>
+                <Text style={styles.clearFiltersText}>Clear All</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.filterModalBody}>
+              {/* Type Filter */}
+              <View style={styles.filterGroup}>
+                <Text style={styles.filterGroupTitle}>Type</Text>
+                {availableTypes.map(type => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.filterOption,
+                      selectedType === type && styles.filterOptionSelected,
+                    ]}
+                    onPress={() => setSelectedType(type)}
+                  >
+                    <Text style={styles.filterOptionText}>{type}</Text>
+                    {selectedType === type && <Check size={20} color={Colors.primary} />}
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Price Range Filter */}
+              <View style={styles.filterGroup}>
+                <Text style={styles.filterGroupTitle}>Price Range</Text>
+                <View style={styles.priceRangeInputContainer}>
+                  <TextInput
+                    style={styles.priceRangeInput}
+                    placeholder="Min"
+                    placeholderTextColor={Colors.textSecondary}
+                    keyboardType="numeric"
+                    value={priceRange.min}
+                    onChangeText={text => setPriceRange(prev => ({ ...prev, min: text }))}
+                  />
+                  <Text style={styles.priceRangeSeparator}>-</Text>
+                  <TextInput
+                    style={styles.priceRangeInput}
+                    placeholder="Max"
+                    placeholderTextColor={Colors.textSecondary}
+                    keyboardType="numeric"
+                    value={priceRange.max}
+                    onChangeText={text => setPriceRange(prev => ({ ...prev, max: text }))}
+                  />
+                </View>
+              </View>
+
+                             {/* Sort By Filter */}
+              <View style={styles.filterGroup}>
+                <Text style={styles.filterGroupTitle}>Sort By</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.filterOption,
+                    sortBy === 'name' && styles.filterOptionSelected,
+                  ]}
+                  onPress={() => setSortBy('name')}
+                >
+                  <Text style={styles.filterOptionText}>Name</Text>
+                  {sortBy === 'name' && <Check size={20} color={Colors.primary} />}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.filterOption,
+                    sortBy === 'priceLow' && styles.filterOptionSelected,
+                  ]}
+                  onPress={() => setSortBy('priceLow')}
+                >
+                  <Text style={styles.filterOptionText}>Price: Low to High</Text>
+                  {sortBy === 'priceLow' && <Check size={20} color={Colors.primary} />}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.filterOption,
+                    sortBy === 'priceHigh' && styles.filterOptionSelected,
+                  ]}
+                  onPress={() => setSortBy('priceHigh')}
+                >
+                  <Text style={styles.filterOptionText}>Price: High to Low</Text>
+                  {sortBy === 'priceHigh' && <Check size={20} color={Colors.primary} />}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
+            <View style={styles.filterModalFooter}>
+              <TouchableOpacity
+                style={styles.applyFiltersButton}
+                onPress={applyFilters}
+              >
+                <Text style={styles.applyFiltersText}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -339,6 +531,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     marginLeft: 12,
+  },
+  filterIconContainer: {
+    position: 'relative',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: Colors.accent,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  filterBadgeText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
   },
 
   content: { padding: 20, paddingBottom: 40 },
@@ -538,6 +750,151 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontFamily: 'Inter_700Bold',
     fontSize: 16,
+  },
+
+  // --- REFINED FILTER MODAL STYLES ---
+  filterModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  filterModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.text,
+  },
+  clearFiltersButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  clearFiltersText: {
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
+  },
+  filterModalBody: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  filterGroup: {
+    marginBottom: 20,
+  },
+  filterGroupTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    marginBottom: 12,
+  },
+  filterOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 8,
+  },
+  filterOptionSelected: {
+    borderColor: Colors.primary,
+    borderWidth: 2,
+    backgroundColor: Colors.primaryLighter,
+  },
+  filterOptionText: {
+    fontSize: 15,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text,
+  },
+  priceRangeInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  priceRangeInput: {
+    flex: 1,
+    height: 50,
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text,
+  },
+  priceRangeSeparator: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
+    marginHorizontal: 10,
+  },
+  filterModalFooter: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  applyFiltersButton: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  applyFiltersText: {
+    color: Colors.white,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 16,
+  },
+  noProductsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  noProductsTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  noProductsSubtitle: {
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  clearFiltersButtonInline: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  clearFiltersTextInline: {
+    color: Colors.white,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 14,
   },
 });
 

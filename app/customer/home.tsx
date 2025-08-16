@@ -1,23 +1,24 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Image,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Image,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 // Import the hook to get safe area dimensions
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
-import { ArrowRight, Flame, ShieldCheck, ShoppingCart } from 'lucide-react-native';
+import { ArrowRight, Flame, ShieldCheck, ShoppingCart, Tag } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Import LinearGradient for the gradient effect
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useCart } from '../../core/context/CartContext';
+import { PromocodeData, promocodeService } from '../../core/services/promocodeService';
 
 // --- Color Palette (Matched with AuthScreen) ---
 const Colors = {
@@ -45,9 +46,47 @@ export default function CustomerHomeScreen() {
   // Get cart items for badge count
   const { cartItems } = useCart();
 
+  // State for featured promocodes
+  const [featuredPromocodes, setFeaturedPromocodes] = useState<PromocodeData[]>([]);
+  const [isLoadingPromocodes, setIsLoadingPromocodes] = useState(true);
+
+  // Load featured promocodes on component mount
+  useEffect(() => {
+    loadFeaturedPromocodes();
+  }, []);
+
+  const loadFeaturedPromocodes = async () => {
+    try {
+      setIsLoadingPromocodes(true);
+      const promocodes = await promocodeService.getFeaturedPromocodes(3);
+      setFeaturedPromocodes(promocodes);
+    } catch (error) {
+      console.error('Error loading featured promocodes:', error);
+    } finally {
+      setIsLoadingPromocodes(false);
+    }
+  };
+
   // Calculate total items in cart
   const getCartItemCount = () => {
     return cartItems.reduce((total, item) => total + item.quantity, 0);
+  };
+
+  // Format discount text for display
+  const getDiscountText = (promocode: PromocodeData) => {
+    if (promocode.discountType === 'percentage') {
+      return `${promocode.discountValue}% OFF`;
+    } else {
+      return `₹${promocode.discountValue} OFF`;
+    }
+  };
+
+  // Get offer title based on promocode
+  const getOfferTitle = (promocode: PromocodeData) => {
+    if (promocode.description) {
+      return promocode.description;
+    }
+    return `Use Code: ${promocode.code}`;
   };
 
   // Handler functions for button actions
@@ -66,8 +105,15 @@ export default function CustomerHomeScreen() {
     router.push('/customer/orders?tab=history');
   };
 
-  const handleClaimOffer = () => {
-    Alert.alert('Weekly Offer', 'Congratulations! Your 10% discount has been applied to your account.');
+  const handleClaimOffer = (promocode?: PromocodeData) => {
+    if (promocode) {
+      Alert.alert(
+        'Promocode Details', 
+        `Code: ${promocode.code}\nDiscount: ${getDiscountText(promocode)}\n${promocode.description || 'No description available'}\n\nApply this code during checkout to get your discount!`
+      );
+    } else {
+      Alert.alert('Weekly Offer', 'Congratulations! Your 10% discount has been applied to your account.');
+    }
   };
 
   const handleCartPress = () => {
@@ -112,23 +158,53 @@ export default function CustomerHomeScreen() {
             </View>
 
             <View style={styles.mainContent}>
-                {/* --- Offer Banner with Gradient --- */}
-                <LinearGradient
+                {/* --- Dynamic Offer Banner with Promocodes --- */}
+                {!isLoadingPromocodes && featuredPromocodes.length > 0 ? (
+                  // Show featured promocodes
+                  featuredPromocodes.map((promocode, index) => (
+                    <LinearGradient
+                      key={promocode.id}
+                      colors={[Colors.primaryLight, Colors.primary]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={[styles.offerBanner, index > 0 && styles.offerBannerMargin]}
+                    >
+                      <Tag size={90} color={Colors.white} style={styles.offerBannerIcon} />
+                      <View style={styles.offerTextContainer}>
+                        <Text style={styles.offerTitle}>{getOfferTitle(promocode)}</Text>
+                        <Text style={styles.offerSubtitle}>{getDiscountText(promocode)}</Text>
+                        {promocode.minOrderAmount && (
+                          <Text style={styles.offerMinAmount}>Min. Order: ₹{promocode.minOrderAmount}</Text>
+                        )}
+                      </View>
+                      <TouchableOpacity 
+                        style={styles.offerButton} 
+                        onPress={() => handleClaimOffer(promocode)}
+                      >
+                        <Text style={styles.offerButtonText}>Use Code</Text>
+                        <ArrowRight size={16} color={Colors.white} />
+                      </TouchableOpacity>
+                    </LinearGradient>
+                  ))
+                ) : (
+                  // Fallback to default offer banner
+                  <LinearGradient
                     colors={[Colors.primaryLight, Colors.primary]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.offerBanner}
-                >
+                  >
                     <Flame size={90} color={Colors.white} style={styles.offerBannerIcon} />
                     <View style={styles.offerTextContainer}>
-                        <Text style={styles.offerTitle}>Weekly Wonder Deal</Text>
-                        <Text style={styles.offerSubtitle}>Get 10% OFF on your next refill!</Text>
+                      <Text style={styles.offerTitle}>Weekly Wonder Deal</Text>
+                      <Text style={styles.offerSubtitle}>Get 10% OFF on your next refill!</Text>
                     </View>
-                    <TouchableOpacity style={styles.offerButton} onPress={handleClaimOffer}>
-                        <Text style={styles.offerButtonText}>Claim Now</Text>
-                        <ArrowRight size={16} color={Colors.white} />
+                    <TouchableOpacity style={styles.offerButton} onPress={() => handleClaimOffer()}>
+                      <Text style={styles.offerButtonText}>Claim Now</Text>
+                      <ArrowRight size={16} color={Colors.white} />
                     </TouchableOpacity>
-                </LinearGradient>
+                  </LinearGradient>
+                )}
 
                 {/* --- Main Action Grid --- */}
                 <View style={styles.gridContainer}>
@@ -249,6 +325,9 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
+  offerBannerMargin: {
+    marginTop: 16,
+  },
   offerBannerIcon: {
     opacity: 0.1, position: 'absolute', right: -10, top: -20, transform: [{ rotate: '15deg' }]
   },
@@ -268,6 +347,13 @@ const styles = StyleSheet.create({
     color: Colors.white,
     marginTop: 4,
     maxWidth: '80%',
+  },
+  offerMinAmount: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    opacity: 0.8,
+    color: Colors.white,
+    marginTop: 2,
   },
   offerButton: {
     backgroundColor: 'rgba(255,255,255,0.2)',

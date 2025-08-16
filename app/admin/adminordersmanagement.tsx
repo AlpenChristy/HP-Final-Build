@@ -52,7 +52,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
-
+  
   // Fetch orders, delivery agents, and products
   useEffect(() => {
     const fetchData = async () => {
@@ -129,7 +129,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
       setSelectedAgent(null);
       setDetailModalVisible(true);
   }
-
+  
   const handleAssignDeliveryAgent = async (orderId: string, agentId: string, agentName: string) => {
     try {
       await orderService.assignDeliveryAgent(orderId, agentId, agentName);

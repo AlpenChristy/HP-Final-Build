@@ -1,6 +1,6 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, CheckCircle, MapPin, Package, Phone, RefreshCw, Truck } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle, MapPin, Package, Phone, Truck } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -202,13 +202,7 @@ export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScree
             </TouchableOpacity>
             <Text style={styles.headerTitle}>My Deliveries</Text>
         </View>
-        <TouchableOpacity 
-          onPress={() => fetchAssignedOrders(true)} 
-          style={styles.headerIcon}
-          disabled={refreshing}
-        >
-          <RefreshCw size={24} color={Colors.white} style={refreshing ? {opacity: 0.5} : {}} />
-        </TouchableOpacity>
+
       </LinearGradient>
 
       <View style={styles.tabContainer}>

@@ -43,6 +43,7 @@ interface PromocodeData {
   validUntil: Date;              // End date
   isActive: boolean;             // Active/inactive status
   description?: string;          // Optional description
+  showOnHome?: boolean;          // Whether to display on home page
   createdBy: string;             // Admin UID who created it
   createdAt: number;             // Timestamp
   updatedAt: number;             // Last update timestamp
@@ -108,6 +109,16 @@ getActivePromocodes(): Promise<PromocodeData[]>
 - Returns all currently active and valid promocodes
 - Used for customer-facing promocode lists
 
+#### **Get Featured Promocodes**
+```typescript
+getFeaturedPromocodes(limit: number = 3): Promise<PromocodeData[]>
+```
+- Returns the best promocodes for home page display
+- Only includes promocodes marked with `showOnHome: true`
+- Prioritizes high-value, low-usage promocodes
+- Sorts by discount value, availability, and recency
+- Used for dynamic offer banners on customer home page
+
 ## Usage Examples
 
 ### Creating a Promocode
@@ -139,6 +150,13 @@ if (validation.valid) {
 }
 ```
 
+### Getting Featured Promocodes for Home Page
+```typescript
+const featuredPromocodes = await promocodeService.getFeaturedPromocodes(3);
+// Returns the top 3 most attractive promocodes for display
+// Sorted by: high discount value, low usage, recent creation
+```
+
 ## Admin Interface
 
 ### Access
@@ -155,13 +173,14 @@ if (validation.valid) {
 ### Form Fields
 - **Promocode**: Unique code (auto-uppercase)
 - **Discount Type**: Percentage or Fixed Amount
-- **Discount Value**: Amount or percentage
-- **Minimum Order Amount**: Optional requirement
-- **Maximum Discount**: For percentage discounts
+- **Discount Value**: Amount or percentage (in ₹)
+- **Minimum Order Amount**: Optional requirement (in ₹)
+- **Maximum Discount**: For percentage discounts (in ₹)
 - **Usage Limit**: Maximum number of uses
 - **Valid From/Until**: Date range
 - **Description**: Optional notes
 - **Active Status**: Toggle on/off
+- **Show on Home Page**: Toggle to display on customer home page
 
 ## Validation Rules
 
@@ -198,6 +217,7 @@ node scripts/testPromocodeService.js
 ## Integration Points
 
 ### Customer Side
+- **Home Page Banners**: Dynamic promocode display on customer home page
 - Promocode input in checkout
 - Validation before applying discount
 - Usage tracking when order is placed

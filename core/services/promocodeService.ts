@@ -16,6 +16,7 @@ export interface PromocodeData {
   validUntil: Date;
   isActive: boolean;
   description?: string;
+  showOnHome?: boolean; // Whether to display this promocode on home page
   createdBy: string; // Admin UID who created this promocode
   createdAt: number;
   updatedAt: number;
@@ -33,6 +34,7 @@ export interface CreatePromocodeData {
   validUntil: Date;
   isActive: boolean;
   description?: string;
+  showOnHome?: boolean; // Whether to display this promocode on home page
 }
 
 // Update promocode data interface
@@ -47,6 +49,7 @@ export interface UpdatePromocodeData {
   validUntil?: Date;
   isActive?: boolean;
   description?: string;
+  showOnHome?: boolean; // Whether to display this promocode on home page
 }
 
 export const promocodeService = {
@@ -85,6 +88,9 @@ export const promocodeService = {
       }
       if (promocodeData.description !== undefined && promocodeData.description !== null && promocodeData.description.trim() !== '') {
         documentData.description = promocodeData.description;
+      }
+      if (promocodeData.showOnHome !== undefined) {
+        documentData.showOnHome = promocodeData.showOnHome;
       }
 
       // Create promocode document
@@ -146,6 +152,7 @@ export const promocodeService = {
           validUntil: data.validUntil?.toDate() || new Date(),
           isActive: data.isActive,
           description: data.description,
+          showOnHome: data.showOnHome,
           createdBy: data.createdBy,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
@@ -181,6 +188,7 @@ export const promocodeService = {
           validUntil: data.validUntil?.toDate() || new Date(),
           isActive: data.isActive,
           description: data.description,
+          showOnHome: data.showOnHome,
           createdBy: data.createdBy,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
@@ -220,6 +228,7 @@ export const promocodeService = {
           validUntil: data.validUntil?.toDate() || new Date(),
           isActive: data.isActive,
           description: data.description,
+          showOnHome: data.showOnHome,
           createdBy: data.createdBy,
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
@@ -285,6 +294,9 @@ export const promocodeService = {
       }
       if (updateData.description !== undefined && updateData.description !== null && updateData.description.trim() !== '') {
         updatePayload.description = updateData.description;
+      }
+      if (updateData.showOnHome !== undefined) {
+        updatePayload.showOnHome = updateData.showOnHome;
       }
 
       // Convert dates to Timestamps if they exist
@@ -356,7 +368,7 @@ export const promocodeService = {
       }
 
       if (promocode.minOrderAmount && orderAmount < promocode.minOrderAmount) {
-        return { valid: false, error: `Minimum order amount of $${promocode.minOrderAmount} required` };
+        return { valid: false, error: `Minimum order amount of ₹${promocode.minOrderAmount} required` };
       }
 
       return { valid: true, promocode };
@@ -401,6 +413,7 @@ export const promocodeService = {
             validUntil: validUntil,
             isActive: data.isActive,
             description: data.description,
+            showOnHome: data.showOnHome,
             createdBy: data.createdBy,
             createdAt: data.createdAt,
             updatedAt: data.updatedAt,
@@ -411,6 +424,41 @@ export const promocodeService = {
       return promocodes;
     } catch (error) {
       console.error('Error getting active promocodes:', error);
+      throw error;
+    }
+  },
+
+  // Get featured promocodes for home page banner (prioritizes high-value, low-usage promocodes)
+  async getFeaturedPromocodes(limit: number = 3): Promise<PromocodeData[]> {
+    try {
+      const activePromocodes = await this.getActivePromocodes();
+      
+      // Filter promocodes that are marked for home display
+      const homePromocodes = activePromocodes.filter(promocode => promocode.showOnHome === true);
+      
+      // Sort promocodes by priority:
+      // 1. Higher discount value first
+      // 2. Lower usage percentage (more availability)
+      // 3. Newer promocodes first
+      const sortedPromocodes = homePromocodes.sort((a, b) => {
+        // Calculate usage percentage
+        const aUsagePercent = (a.usedCount / a.usageLimit) * 100;
+        const bUsagePercent = (b.usedCount / b.usageLimit) * 100;
+        
+        // Normalize discount value (percentage vs fixed amount)
+        const aValue = a.discountType === 'percentage' ? a.discountValue * 2 : a.discountValue; // Weight percentage higher
+        const bValue = b.discountType === 'percentage' ? b.discountValue * 2 : b.discountValue;
+        
+        // Priority score (higher is better)
+        const aScore = aValue - aUsagePercent + (a.createdAt / 1000000); // Include recency
+        const bScore = bValue - bUsagePercent + (b.createdAt / 1000000);
+        
+        return bScore - aScore;
+      });
+      
+      return sortedPromocodes.slice(0, limit);
+    } catch (error) {
+      console.error('Error getting featured promocodes:', error);
       throw error;
     }
   },
