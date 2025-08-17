@@ -6,8 +6,8 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { Tabs } from 'expo-router';
 import { BarChart2, ClipboardList, Package, Truck, User } from 'lucide-react-native';
 import { Platform } from 'react-native';
-import { useAuth } from '../../core/auth/AuthContext';
 import { AdminProtectedRoute } from '../../core/auth/AdminProtectedRoute';
+import { useAuth } from '../../core/auth/AuthContext';
 
 export default function AdminTabLayout() {
   const colorScheme = useColorScheme();

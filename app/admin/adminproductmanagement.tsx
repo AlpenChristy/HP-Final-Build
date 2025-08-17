@@ -259,6 +259,9 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Product Management</Text>
         </View>
+        <TouchableOpacity onPress={() => openModal()} style={styles.headerIcon}>
+            <Plus size={26} color={Colors.white} />
+        </TouchableOpacity>
       </LinearGradient>
 
       <View style={styles.searchSection}>
@@ -322,9 +325,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => openModal()}>
-        <Plus size={24} color={Colors.white} />
-      </TouchableOpacity>
+
 
       <Modal
         animationType="slide"
@@ -519,6 +520,9 @@ const styles = StyleSheet.create({
   header: {
     paddingBottom: 20,
     paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerLeft: {
     flexDirection: 'row',

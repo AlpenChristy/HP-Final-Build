@@ -1,6 +1,6 @@
 // core/services/productService.ts
 
-import { addDoc, collection, deleteDoc, doc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { FIREBASE_DB } from '../firebase/firebase';
 
@@ -76,6 +76,57 @@ export const getProductsByType = async (type: string) => {
   } catch (error) {
     console.error('Error getting products by type:', error);
     throw error;
+  }
+};
+
+// Get products for customers (show all products, regardless of stock)
+export const getCustomerProducts = async () => {
+  try {
+    const querySnapshot = await getDocs(productsCollection);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Product[];
+  } catch (error) {
+    console.error('Error getting customer products:', error);
+    throw error;
+  }
+};
+
+// Get products by type for customers (show all products of that type)
+export const getCustomerProductsByType = async (type: string) => {
+  try {
+    const q = query(
+      productsCollection, 
+      where("type", "==", type)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Product[];
+  } catch (error) {
+    console.error('Error getting customer products by type:', error);
+    throw error;
+  }
+};
+
+// Get product by ID
+export const getProductById = async (productId: string): Promise<Product | null> => {
+  try {
+    const productRef = doc(FIREBASE_DB, 'products', productId);
+    const productDoc = await getDoc(productRef);
+    
+    if (productDoc.exists()) {
+      return {
+        id: productDoc.id,
+        ...productDoc.data()
+      } as Product;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting product by ID:', error);
+    return null;
   }
 };
 

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 // Import the hook to get safe area dimensions
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
-import { ArrowRight, Flame, ShieldCheck, ShoppingCart, Tag } from 'lucide-react-native';
+import { ArrowRight, Flame, ShoppingCart, Tag } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Import LinearGradient for the gradient effect
 import { LinearGradient } from 'expo-linear-gradient';
@@ -247,17 +247,6 @@ export default function CustomerHomeScreen() {
                     </TouchableOpacity>
                 </View>
                 </View>
-
-                {/* --- Safety Tip --- */}
-                <View style={styles.safetyCard}>
-                <View style={styles.safetyIcon}>
-                    <ShieldCheck size={24} color={Colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                    <Text style={styles.safetyTitle}>Safety Tip</Text>
-                    <Text style={styles.safetyText}>Always store your gas cylinder in a well-ventilated area.</Text>
-                </View>
-                </View>
            
             </View>
         </ScrollView>
@@ -461,36 +450,5 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 0,
   },
-  safetyCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 24,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.10,
-    shadowRadius: 12,
-    elevation: 5,
 
-},
-
-  safetyIcon: {
-    backgroundColor: Colors.primaryLighter,
-    padding: 12,
-    borderRadius: 99,
-  },
-  safetyTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  safetyText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    fontFamily: 'Inter_400Regular',
-    lineHeight: 20,
-  },
 });

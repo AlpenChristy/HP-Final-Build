@@ -201,6 +201,9 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Delivery Agents</Text>
         </View>
+        <TouchableOpacity onPress={() => openEditModal()} style={styles.headerIcon}>
+            <Plus size={26} color={Colors.white} />
+        </TouchableOpacity>
       </LinearGradient>
 
       <View style={styles.searchSection}>
@@ -242,9 +245,7 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
         ))}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => openEditModal()}>
-        <Plus size={24} color={Colors.white} />
-      </TouchableOpacity>
+
 
       {/* Add/Edit Modal */}
       <Modal
@@ -349,6 +350,9 @@ const styles = StyleSheet.create({
   header: {
     paddingBottom: 20,
     paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerLeft: {
     flexDirection: 'row',

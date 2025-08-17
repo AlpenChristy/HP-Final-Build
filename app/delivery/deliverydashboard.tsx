@@ -1,9 +1,11 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { CheckCircle, Clock, Package, Star, BarChart2 as TrendingUp } from 'lucide-react-native';
-import React from 'react';
+import { CheckCircle, Clock, Package, BarChart2 as TrendingUp } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../core/auth/AuthContext';
+import { orderService } from '../../core/services/orderService';
 
 // --- Red Color Palette ---
 const Colors = {
@@ -22,26 +24,129 @@ const Colors = {
 
 export default function DeliverySummaryScreen() {
   const insets = useSafeAreaInsets();
+  const { userSession } = useAuth();
+  
+  const [todayStats, setTodayStats] = useState({
+    totalDeliveries: 0,
+    completedDeliveries: 0,
+    pendingDeliveries: 0,
+    earnings: 0,
+  });
+  
+  const [recentDeliveries, setRecentDeliveries] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
 
-  const todayStats = {
-    totalDeliveries: 8,
-    completedDeliveries: 6,
-    pendingDeliveries: 2,
-    earnings: 480,
+  // Load delivery data
+  useEffect(() => {
+    if (userSession?.uid) {
+      loadDeliveryData();
+    }
+  }, [userSession?.uid]);
+
+  const loadDeliveryData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get today's date range
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+      
+      // Get all orders and filter by delivery agent (in case the query isn't working)
+      let agentOrders = await orderService.getOrdersByDeliveryAgent(userSession.uid);
+      
+      // If no orders found, try getting all orders and filtering manually
+      if (agentOrders.length === 0) {
+        console.log('No orders found with delivery agent query, trying manual filter...');
+        const allOrders = await orderService.getAllOrders();
+        agentOrders = allOrders.filter(order => order.deliveryAgentId === userSession.uid);
+        console.log('Manual filter found:', agentOrders.length, 'orders');
+      }
+      
+      console.log('All agent orders:', agentOrders.length);
+      console.log('Agent UID:', userSession.uid);
+      console.log('Sample order:', agentOrders[0]);
+      if (agentOrders[0]) {
+        console.log('Sample order total:', agentOrders[0].total);
+        console.log('Sample order items:', agentOrders[0].items);
+      }
+      
+      // Filter today's orders - use createdAt if orderDate is not available
+      const todayOrders = agentOrders.filter(order => {
+        const orderDate = new Date(order.orderDate || order.createdAt);
+        return orderDate >= startOfDay && orderDate <= endOfDay;
+      });
+      
+      console.log('Today orders:', todayOrders.length);
+      
+      // Calculate stats
+      const totalDeliveries = todayOrders.length;
+      const completedDeliveries = todayOrders.filter(order => order.orderStatus === 'delivered').length;
+      const pendingDeliveries = totalDeliveries - completedDeliveries;
+      
+      // Calculate total value of delivered products TODAY only
+      const todayCompletedOrders = todayOrders.filter(order => order.orderStatus === 'delivered');
+      console.log('Today completed orders for total value:', todayCompletedOrders.length);
+      
+      const earnings = todayCompletedOrders.reduce((total, order) => {
+        console.log(`Today's Order ${order.id}: Total value ₹${order.total}`);
+        return total + order.total;
+      }, 0);
+      
+      console.log('Total value of TODAY\'s delivered products:', earnings);
+      
+      setTodayStats({
+        totalDeliveries,
+        completedDeliveries,
+        pendingDeliveries,
+        earnings,
+      });
+      
+      // Get recent deliveries (last 5 completed orders)
+      const recentCompletedOrders = agentOrders
+        .filter(order => order.orderStatus === 'delivered')
+        .sort((a, b) => (b.deliveredAt || b.createdAt) - (a.deliveredAt || a.createdAt))
+        .slice(0, 5)
+        .map(order => ({
+          id: order.id,
+          customer: order.customerName,
+          time: new Date(order.deliveredAt || order.createdAt).toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true 
+          }),
+          orderTotal: order.total, // Show actual order total
+          items: order.items, // Include items for product details
+        }));
+      
+      setRecentDeliveries(recentCompletedOrders);
+      
+      // Log final stats for debugging
+      console.log('Final stats:', {
+        totalDeliveries,
+        completedDeliveries,
+        pendingDeliveries,
+        earnings,
+        recentDeliveriesCount: recentCompletedOrders.length
+      });
+      
+    } catch (error) {
+      console.error('Error loading delivery data:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const recentDeliveries = [
-    { id: 'ORD001', customer: 'John Doe', time: '2:30 PM', earnings: 60, rating: 5 },
-    { id: 'ORD002', customer: 'Jane Smith', time: '1:45 PM', earnings: 80, rating: 4 },
-    { id: 'ORD003', customer: 'Mike Johnson', time: '12:15 PM', earnings: 60, rating: 5 },
-  ];
-
-  if (!fontsLoaded) {
-    return <View style={styles.loadingContainer} />;
+  if (!fontsLoaded || isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading delivery data...</Text>
+      </View>
+    );
   }
 
   return (
@@ -64,36 +169,43 @@ export default function DeliverySummaryScreen() {
                 <View style={styles.statCard}><View style={styles.statIconContainer}><Package size={24} color={Colors.primary} /></View><Text style={styles.statValue}>{todayStats.totalDeliveries}</Text><Text style={styles.statLabel}>Total Orders</Text></View>
                 <View style={styles.statCard}><View style={styles.statIconContainer}><CheckCircle size={24} color={Colors.primary} /></View><Text style={styles.statValue}>{todayStats.completedDeliveries}</Text><Text style={styles.statLabel}>Completed</Text></View>
                 <View style={styles.statCard}><View style={styles.statIconContainer}><Clock size={24} color={Colors.primary} /></View><Text style={styles.statValue}>{todayStats.pendingDeliveries}</Text><Text style={styles.statLabel}>Pending</Text></View>
-                <View style={styles.statCard}><View style={styles.statIconContainer}><TrendingUp size={24} color={Colors.primary} /></View><Text style={styles.earningsValue}>₹{todayStats.earnings}</Text><Text style={styles.statLabel}>Earnings</Text></View>
+                <View style={styles.statCard}><View style={styles.statIconContainer}><TrendingUp size={24} color={Colors.primary} /></View><Text style={styles.earningsValue}>₹{todayStats.earnings}</Text><Text style={styles.statLabel}>Total Value</Text></View>
             </View>
         </View>
 
         <View style={styles.section}>
             <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Recent Deliveries</Text>
-                <TouchableOpacity>
-                    <Text style={styles.viewAllText}>View All</Text>
+                <TouchableOpacity onPress={loadDeliveryData}>
+                    <Text style={styles.viewAllText}>Refresh</Text>
                 </TouchableOpacity>
             </View>
             <View style={styles.deliveryListContainer}>
-                {recentDeliveries.map((delivery, index) => (
-                <View key={delivery.id} style={[styles.deliveryCard, index === recentDeliveries.length - 1 && {borderBottomWidth: 0}]}>
-                    <View style={[styles.statIconContainer, {marginRight: 16}]}>
-                        <Package size={20} color={Colors.primary} />
+                {recentDeliveries.length > 0 ? (
+                    recentDeliveries.map((delivery, index) => (
+                    <View key={delivery.id} style={[styles.deliveryCard, index === recentDeliveries.length - 1 && {borderBottomWidth: 0}]}>
+                        <View style={[styles.statIconContainer, {marginRight: 16}]}>
+                            <Package size={20} color={Colors.primary} />
+                        </View>
+                        <View style={styles.deliveryInfo}>
+                        <Text style={styles.deliveryCustomer}>{delivery.customer}</Text>
+                        <Text style={styles.deliveryTime}>Delivered at {delivery.time}</Text>
+                        <Text style={styles.deliveryItems}>
+                          {delivery.items?.length || 0} items • {delivery.items?.[0]?.productName || 'Products'}
+                        </Text>
+                        </View>
+                        <View style={styles.deliveryRight}>
+                        <Text style={styles.deliveryEarnings}>₹{delivery.orderTotal}</Text>
+                        </View>
                     </View>
-                    <View style={styles.deliveryInfo}>
-                    <Text style={styles.deliveryCustomer}>{delivery.customer}</Text>
-                    <Text style={styles.deliveryTime}>Delivered at {delivery.time}</Text>
+                    ))
+                ) : (
+                    <View style={styles.emptyState}>
+                        <Package size={48} color={Colors.textSecondary} />
+                        <Text style={styles.emptyStateText}>No deliveries yet</Text>
+                        <Text style={styles.emptyStateSubtext}>Completed deliveries will appear here</Text>
                     </View>
-                    <View style={styles.deliveryRight}>
-                    <Text style={styles.deliveryEarnings}>₹{delivery.earnings}</Text>
-                    <View style={styles.ratingContainer}>
-                        <Star size={12} color={Colors.yellow} fill={Colors.yellow} />
-                        <Text style={styles.ratingText}>{delivery.rating}</Text>
-                    </View>
-                    </View>
-                </View>
-                ))}
+                )}
             </View>
         </View>
       </ScrollView>
@@ -102,7 +214,18 @@ export default function DeliverySummaryScreen() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: Colors.background 
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
+    marginTop: 12,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -222,6 +345,12 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontFamily: 'Inter_400Regular',
   },
+  deliveryItems: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontFamily: 'Inter_400Regular',
+    marginTop: 2,
+  },
   deliveryRight: {
     alignItems: 'flex-end',
   },
@@ -229,16 +358,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
     color: Colors.text,
-    marginBottom: 4,
   },
-  ratingContainer: {
-    flexDirection: 'row',
+  emptyState: {
+    padding: 40,
     alignItems: 'center',
   },
-  ratingText: {
-    fontSize: 12,
-    fontFamily: 'Inter_600SemiBold',
-    color: Colors.yellow,
-    marginLeft: 4,
+  emptyStateText: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
 });

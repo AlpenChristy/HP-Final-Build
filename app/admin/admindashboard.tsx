@@ -1,11 +1,12 @@
 // File: app/admin/admindashboard.tsx
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Package, BarChart2 as TrendingUp, Truck, Users } from 'lucide-react-native';
-import React from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AlertTriangle, CheckCircle, Minus, Package, Plus, Truck } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
+import { getProducts, Product, updateProduct } from '../../core/services/productService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -26,35 +27,99 @@ const Colors = {
 export default function AdminDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { userSession } = useAuth();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
 
-  const stats = [
-    { title: 'Total Orders', value: '156', icon: Package },
-    { title: 'Customers', value: '89', icon: Users },
-    { title: 'Delivery Agents', value: '12', icon: Truck },
-    { title: 'Total Earnings', value: '₹50,000', icon: TrendingUp },
-  ];
+  // Load products on component mount
+  useEffect(() => {
+    loadProducts();
+  }, []);
 
-  const recentOrders = [
-    { id: 'ORD001', customer: 'Isha Solanki', product: 'HP Gas 14.2kg', status: 'Pending', amount: '₹880' },
-    { id: 'ORD002', customer: 'Alpenbhai', product: 'HP Gas 19kg', status: 'Delivered', amount: '₹1,250' },
-    { id: 'ORD003', customer: 'Disha', product: 'HP Gas 14.2kg', status: 'Out for Delivery', amount: '₹880' },
-  ];
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Delivered': return Colors.green;
-      case 'Out for Delivery': return Colors.primary;
-      case 'Pending': return Colors.yellow;
-      default: return Colors.textSecondary;
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+      const productsData = await getProducts();
+      setProducts(productsData);
+    } catch (error) {
+      console.error('Error loading products:', error);
+      Alert.alert('Error', 'Failed to load products');
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!fontsLoaded) {
-    return <View style={styles.loadingContainer} />;
+  const handleUpdateStock = async (product: Product, newQuantity: number) => {
+    try {
+      await updateProduct(product.id!, {
+        ...product,
+        quantity: newQuantity,
+        inStock: newQuantity > 0
+      });
+      
+      // Refresh products
+      await loadProducts();
+      Alert.alert('Success', 'Stock updated successfully');
+    } catch (error) {
+      console.error('Error updating stock:', error);
+      Alert.alert('Error', 'Failed to update stock');
+    }
+  };
+
+  const handleIncrementStock = (product: Product) => {
+    const currentQuantity = product.quantity || 0;
+    handleUpdateStock(product, currentQuantity + 1);
+  };
+
+  const handleDecrementStock = (product: Product) => {
+    const currentQuantity = product.quantity || 0;
+    if (currentQuantity > 0) {
+      handleUpdateStock(product, currentQuantity - 1);
+    } else {
+      Alert.alert('Warning', 'Stock is already at 0');
+    }
+  };
+
+  // Calculate stock recommendations
+  const getStockRecommendation = (product: Product) => {
+    const currentQuantity = product.quantity || 0;
+    if (currentQuantity < 0) {
+      return `URGENT: Backorder - ${Math.abs(currentQuantity)} units needed!`;
+    } else if (currentQuantity === 0) {
+      return 'URGENT: Restock needed - product is out of stock!';
+    } else if (currentQuantity <= 5) {
+      return `Restock needed - only ${currentQuantity} left`;
+    } else if (currentQuantity <= 10) {
+      return `Consider restocking - ${currentQuantity} available`;
+    } else {
+      return `Well stocked - ${currentQuantity} available`;
+    }
+  };
+
+  // Calculate dashboard stats
+  const totalProducts = products.length;
+  const inStockProducts = products.filter(p => (p.quantity || 0) > 0).length;
+  const lowStockProducts = products.filter(p => (p.quantity || 0) <= 5 && (p.quantity || 0) > 0).length;
+  const outOfStockProducts = products.filter(p => (p.quantity || 0) === 0).length;
+  const backorderProducts = products.filter(p => (p.quantity || 0) < 0).length;
+  const availableForCustomers = products.length; // All products are visible to customers
+
+  const stats = [
+    { title: 'Total Products', value: totalProducts.toString(), icon: Package },
+    { title: 'In Stock', value: inStockProducts.toString(), icon: CheckCircle },
+    { title: 'Low Stock (≤5)', value: lowStockProducts.toString(), icon: AlertTriangle },
+    { title: 'Out of Stock', value: (outOfStockProducts + backorderProducts).toString(), icon: Truck },
+  ];
+
+  if (!fontsLoaded || loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading dashboard...</Text>
+      </View>
+    );
   }
 
   return (
@@ -75,38 +140,110 @@ export default function AdminDashboardScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.statsGrid}>
-          {stats.map((stat, index) => (
-            <View key={index} style={styles.statCard}>
-              <View style={[styles.statIconContainer, { backgroundColor: `${Colors.primaryLighter}` }]}>
-                <stat.icon size={24} color={Colors.primary} />
+          {stats.map((stat, index) => {
+            const getCardColor = () => {
+              switch (stat.title) {
+                case 'Total Products': return { bg: '#E3F2FD', icon: '#1976D2' };
+                case 'In Stock': return { bg: '#E8F5E8', icon: '#2E7D32' };
+                case 'Low Stock': return { bg: '#FFF8E1', icon: '#F57C00' };
+                case 'Out of Stock': return { bg: '#FFEBEE', icon: '#D32F2F' };
+                default: return { bg: Colors.primaryLighter, icon: Colors.primary };
+              }
+            };
+            const colors = getCardColor();
+            
+            return (
+              <View key={index} style={styles.statCard}>
+                <View style={[styles.statIconContainer, { backgroundColor: colors.bg }]}>
+                  <stat.icon size={20} color={colors.icon} />
+                </View>
+                <Text style={styles.statValue}>{stat.value}</Text>
+                <Text style={styles.statTitle}>{stat.title}</Text>
               </View>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statTitle}>{stat.title}</Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Orders</Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAllText}>View All</Text>
+            <Text style={styles.sectionTitle}>Stock Management</Text>
+            <TouchableOpacity onPress={loadProducts}>
+              <Text style={styles.viewAllText}>Refresh</Text>
             </TouchableOpacity>
           </View>
           
-          <View style={styles.orderListContainer}>
-            {recentOrders.map((order, index) => (
-              <TouchableOpacity key={order.id} style={[styles.orderCard, index === recentOrders.length - 1 && {borderBottomWidth: 0}]}>
-                <View style={styles.orderInfo}>
-                  <Text style={styles.customerName}>{order.customer}</Text>
-                  <Text style={styles.orderId}>#{order.id} - {order.product}</Text>
+          <View style={styles.stockListContainer}>
+            {products.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No products found</Text>
+                <Text style={styles.emptyStateSubtext}>Add products to manage stock</Text>
+              </View>
+            ) : (
+              products.map((product, index) => (
+                <View key={product.id} style={[styles.stockCard, index === products.length - 1 && {borderBottomWidth: 0}]}>
+                                    <View style={styles.productInfo}>
+                    <Text style={styles.productName}>{product.name}</Text>
+                    <Text style={styles.productPrice}>₹{product.price}</Text>
+                    <View style={styles.stockStatus}>
+                      <View style={[
+                        styles.stockBadge, 
+                        { 
+                          backgroundColor: (product.quantity || 0) < 0
+                            ? `${Colors.red}2A`
+                            : (product.quantity || 0) === 0
+                              ? `${Colors.red}1A`
+                              : (product.quantity || 0) <= 5 
+                                ? `${Colors.yellow}1A` 
+                                : `${Colors.green}1A`
+                        }
+                      ]}>
+                        <Text style={[
+                          styles.stockBadgeText, 
+                          { 
+                            color: (product.quantity || 0) < 0
+                              ? Colors.red
+                              : (product.quantity || 0) === 0
+                                ? Colors.red
+                                : (product.quantity || 0) <= 5 
+                                  ? Colors.yellow 
+                                  : Colors.green
+                          }
+                        ]}>
+                                                  {(product.quantity || 0) < 0 
+                          ? `Backorder (${Math.abs(product.quantity || 0)})`
+                          : (product.quantity || 0) === 0 
+                            ? 'Out of Stock'
+                            : (product.quantity || 0) <= 5 
+                              ? `Low Stock (${product.quantity || 0})` 
+                              : `In Stock (${product.quantity || 0})`
+                        }
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.stockRecommendation}>
+                      {getStockRecommendation(product)}
+                    </Text>
+                  </View>
+                  <View style={styles.stockControls}>
+                    <Text style={styles.stockQuantity}>{product.quantity || 0}</Text>
+                    <View style={styles.stockButtons}>
+                      <TouchableOpacity 
+                        style={styles.stockButton}
+                        onPress={() => handleDecrementStock(product)}
+                      >
+                        <Minus size={16} color={Colors.white} />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.stockButton}
+                        onPress={() => handleIncrementStock(product)}
+                      >
+                        <Plus size={16} color={Colors.white} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </View>
-                <View style={styles.orderRight}>
-                  <Text style={styles.orderAmount}>{order.amount}</Text>
-                  <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>{order.status}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+              ))
+            )}
           </View>
         </View>
       </ScrollView>
@@ -121,20 +258,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
-    paddingBottom: 20,
+    paddingBottom: 24,
     paddingHorizontal: 20,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontFamily: 'Inter_700Bold',
     color: Colors.white,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Inter_400Regular',
     color: Colors.white,
-    opacity: 0.8,
+    opacity: 0.9,
   },
   content: {
     padding: 20,
@@ -143,24 +280,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 24,
+    gap: 8,
   },
   statCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 16,
     width: '48%',
-    marginBottom: 16,
     shadowColor: '#959DA5',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
     elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   statIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
@@ -172,72 +311,142 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   statTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Inter_500Medium',
     color: Colors.textSecondary,
+    lineHeight: 16,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter_600SemiBold',
+    fontSize: 20,
+    fontFamily: 'Inter_700Bold',
     color: Colors.text,
   },
   viewAllText: {
     fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
     color: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.primaryLighter,
+    borderRadius: 20,
   },
-  orderListContainer: {
+  stockListContainer: {
     backgroundColor: Colors.surface,
-    borderRadius: 16,
-    paddingHorizontal: 16,
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
     shadowColor: '#959DA5',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  orderCard: {
+  stockCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 20,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
   },
-  orderInfo: {
+  productInfo: {
     flex: 1,
+    marginRight: 16,
   },
-  customerName: {
-    fontSize: 16,
+  productName: {
+    fontSize: 17,
     fontFamily: 'Inter_600SemiBold',
     color: Colors.text,
-    marginBottom: 2,
+    marginBottom: 6,
   },
-  orderId: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontFamily: 'Inter_400Regular',
-  },
-  orderRight: {
-    alignItems: 'flex-end',
-  },
-  orderAmount: {
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  statusText: {
-    fontSize: 13,
+  productPrice: {
+    fontSize: 15,
     fontFamily: 'Inter_500Medium',
+    color: Colors.primary,
+    marginBottom: 12,
+  },
+  stockStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stockBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  stockBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  stockRecommendation: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
+  stockControls: {
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    minWidth: 80,
+  },
+  stockQuantity: {
+    fontSize: 20,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.text,
+    marginBottom: 10,
+  },
+  stockButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  stockButton: {
+    backgroundColor: Colors.primary,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  emptyState: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    marginTop: 12,
   },
 });

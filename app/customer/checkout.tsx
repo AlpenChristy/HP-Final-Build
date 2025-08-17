@@ -5,8 +5,8 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
-import { useCart } from '../../core/context/CartContext';
 import { useAddress } from '../../core/context/AddressContext';
+import { useCart } from '../../core/context/CartContext';
 import { CreateOrderData, orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
 
@@ -43,6 +43,18 @@ export default function CheckoutScreen() {
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,
   });
+
+  // Check if cart is empty and redirect
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      Alert.alert('Empty Cart', 'Your cart is empty. Please add items to your cart before checkout.', [
+        {
+          text: 'OK',
+          onPress: () => router.push('/customer/home')
+        }
+      ]);
+    }
+  }, [cartItems]);
 
   // Load user data
   useEffect(() => {
@@ -172,7 +184,7 @@ export default function CheckoutScreen() {
       
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
+            <TouchableOpacity onPress={() => router.push('/customer/cart')} style={styles.headerIcon}>
                 <ArrowLeft size={26} color={Colors.white} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Checkout</Text>

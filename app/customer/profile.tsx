@@ -6,6 +6,7 @@ import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StatusBar, St
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useAddress } from '../../core/context/AddressContext';
+import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
 
@@ -213,27 +214,79 @@ const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
     );
 };
 
-const NotificationsContent = () => {
-    const notifications = [
-        { icon: Truck, title: 'Order on the way', message: 'Your order #ORD001 is out for delivery.', time: '10 mins ago', color: Colors.primary },
-        { icon: Tag, title: 'Special Offer!', message: 'Get 15% off on your next booking with code SAVE15.', time: '1 hour ago', color: Colors.green },
-        { icon: Bell, title: 'KYC Required', message: 'Please complete your KYC to continue enjoying our services.', time: '2 days ago', color: Colors.yellow },
-    ];
+const NotificationsContent = ({ notifications, isLoading }: { notifications: NotificationData[], isLoading: boolean }) => {
+    const getNotificationIcon = (type: string) => {
+        switch (type) {
+            case 'announcement': return Bell;
+            case 'promo': return Tag;
+            case 'order_update': return Truck;
+            case 'system': return Bell;
+            default: return Bell;
+        }
+    };
+
+    const getNotificationColor = (priority: string) => {
+        switch (priority) {
+            case 'high': return Colors.red;
+            case 'medium': return Colors.yellow;
+            case 'low': return Colors.green;
+            default: return Colors.primary;
+        }
+    };
+
+    const formatTime = (timestamp: number) => {
+        const now = Date.now();
+        const diff = now - timestamp;
+        const minutes = Math.floor(diff / (1000 * 60));
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+        if (minutes < 60) {
+            return `${minutes} mins ago`;
+        } else if (hours < 24) {
+            return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+        } else {
+            return `${days} day${days > 1 ? 's' : ''} ago`;
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading notifications...</Text>
+            </View>
+        );
+    }
+
+    if (notifications.length === 0) {
+        return (
+            <View style={styles.emptyNotificationsContainer}>
+                <Bell size={48} color={Colors.textSecondary} />
+                <Text style={styles.emptyNotificationsText}>No notifications yet</Text>
+                <Text style={styles.emptyNotificationsSubtext}>You'll see important updates here</Text>
+            </View>
+        );
+    }
 
     return (
         <View>
-            {notifications.map((notif, index) => (
-                <View key={index} style={styles.notificationItem}>
-                    <View style={[styles.notificationIcon, {backgroundColor: `${notif.color}1A`}]}>
-                        <notif.icon size={20} color={notif.color} />
+            {notifications.map((notif) => {
+                const IconComponent = getNotificationIcon(notif.type);
+                const color = getNotificationColor(notif.priority);
+                
+                return (
+                    <View key={notif.id} style={styles.notificationItem}>
+                        <View style={[styles.notificationIcon, {backgroundColor: `${color}1A`}]}>
+                            <IconComponent size={20} color={color} />
+                        </View>
+                        <View style={styles.notificationTextContainer}>
+                            <Text style={styles.notificationTitle}>{notif.title}</Text>
+                            <Text style={styles.notificationMessage}>{notif.message}</Text>
+                            <Text style={styles.notificationTime}>{formatTime(notif.createdAt)}</Text>
+                        </View>
                     </View>
-                    <View style={styles.notificationTextContainer}>
-                        <Text style={styles.notificationTitle}>{notif.title}</Text>
-                        <Text style={styles.notificationMessage}>{notif.message}</Text>
-                        <Text style={styles.notificationTime}>{notif.time}</Text>
-                    </View>
-                </View>
-            ))}
+                );
+            })}
         </View>
     );
 };
@@ -242,11 +295,17 @@ const HelpSupportContent = () => (
     <View>
         <TouchableOpacity style={styles.helpRow}>
             <Phone size={20} color={Colors.primary} />
-            <Text style={styles.helpText}>Call Customer Support</Text>
+            <View style={styles.helpTextContainer}>
+                <Text style={styles.helpText}>Call Customer Support</Text>
+                <Text style={styles.helpSubText}>+91 9428071451</Text>
+            </View>
         </TouchableOpacity>
         <TouchableOpacity style={styles.helpRow}>
             <Mail size={20} color={Colors.primary} />
-            <Text style={styles.helpText}>Email Us</Text>
+            <View style={styles.helpTextContainer}>
+                <Text style={styles.helpText}>Email Us</Text>
+                <Text style={styles.helpSubText}>viharelectrichp@gmail.com</Text>
+            </View>
         </TouchableOpacity>
     </View>
 );
@@ -301,6 +360,8 @@ export default function ProfileScreen() {
     activeOrders: 0
   });
   const [refreshing, setRefreshing] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationData[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
 
   // Load user data and order statistics from database
   const loadUserDataAndStats = async (isRefresh = false) => {
@@ -342,8 +403,22 @@ export default function ProfileScreen() {
     }
   };
 
+  // Load notifications for customers
+  const loadNotifications = async () => {
+    setIsLoadingNotifications(true);
+    try {
+      const customerNotifications = await notificationService.getActiveNotificationsForCustomers();
+      setNotifications(customerNotifications);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
+
   useEffect(() => {
     loadUserDataAndStats();
+    loadNotifications();
   }, [userSession?.uid]);
 
   const handleLogout = async () => {
@@ -415,7 +490,7 @@ export default function ProfileScreen() {
       switch(modalContent) {
           case 'personal': return <PersonalInfoContent user={user} />;
           case 'address': return <DeliveryAddressContent user={user} onUpdateAddress={handleUpdateAddress} />;
-          case 'notifications': return <NotificationsContent />;
+          case 'notifications': return <NotificationsContent notifications={notifications} isLoading={isLoadingNotifications} />;
           case 'help': return <HelpSupportContent />;
           case 'password': return <ChangePasswordContent onForgotPassword={() => setModalContent('forgotPassword')} />;
           case 'forgotPassword': return <ForgotPasswordContent />;
@@ -424,9 +499,15 @@ export default function ProfileScreen() {
   }
   
   const getModalTitle = () => {
-      if (modalContent === 'forgotPassword') return 'Forgot Password';
-      const item = menuItems.find(item => item.action.toString().includes(modalContent));
-      return item ? item.title : '';
+      switch(modalContent) {
+          case 'personal': return 'Personal Information';
+          case 'address': return 'Delivery Address';
+          case 'password': return 'Change Password';
+          case 'notifications': return 'Notifications';
+          case 'help': return 'Help & Support';
+          case 'forgotPassword': return 'Forgot Password';
+          default: return '';
+      }
   }
 
   return (
@@ -800,10 +881,19 @@ const styles = StyleSheet.create({
       borderRadius: 12,
       marginBottom: 12,
   },
+  helpTextContainer: {
+      flex: 1,
+  },
   helpText: {
       fontSize: 16,
       fontFamily: 'Inter_500Medium',
       color: Colors.text,
+  },
+  helpSubText: {
+      fontSize: 14,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+      marginTop: 2,
   },
   forgotPasswordButton: {
       alignSelf: 'flex-end',
@@ -895,5 +985,31 @@ const styles = StyleSheet.create({
       color: Colors.white,
       fontFamily: 'Inter_500Medium',
       fontSize: 14,
+  },
+  loadingContainer: {
+      padding: 20,
+      alignItems: 'center',
+  },
+  loadingText: {
+      fontSize: 14,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+  },
+  emptyNotificationsContainer: {
+      padding: 40,
+      alignItems: 'center',
+  },
+  emptyNotificationsText: {
+      fontSize: 16,
+      fontFamily: 'Inter_500Medium',
+      color: Colors.textSecondary,
+      marginTop: 16,
+      marginBottom: 8,
+  },
+  emptyNotificationsSubtext: {
+      fontSize: 14,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+      textAlign: 'center',
   },
 });

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../core/context/CartContext';
-import { getProducts, Product } from '../../core/services/productService';
+import { getCustomerProducts, Product } from '../../core/services/productService';
 
 
 // --- Modern Color Palette ---
@@ -33,6 +33,7 @@ const Colors = {
   error: '#D32F2F',
   errorLight: '#FFEBEE',
   accent: '#F59E0B',
+  green: '#16A34A',
 };
 
 export default function ProductsScreen() {
@@ -63,11 +64,11 @@ export default function ProductsScreen() {
     const fetchProducts = async () => {
       try {
         setLoading(true);
-        const productsData = await getProducts();
+        const productsData = await getCustomerProducts();
         setProducts(productsData);
         
         // Extract unique product types for filter options
-        const types = [...new Set(productsData.map(product => product.type))];
+        const types = [...new Set(productsData.map((product: Product) => product.type))];
         setAvailableTypes(types);
       } catch (error) {
         console.error('Error fetching products:', error);
@@ -151,9 +152,7 @@ export default function ProductsScreen() {
   // Filter and sort products
   const getFilteredAndSortedProducts = () => {
     let filtered = products.filter(product => {
-      // Hide unavailable products
-      if (!product.inStock) return false;
-      
+      // Show all products regardless of stock status
       // Search filter
       const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            product.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -251,6 +250,7 @@ export default function ProductsScreen() {
                   <Text style={styles.price}>₹{product.price}</Text>
                   {product.originalPrice && <Text style={styles.originalPrice}>₹{product.originalPrice}</Text>}
                 </View>
+
               </View>
               <TouchableOpacity 
                 style={styles.cartButton}
@@ -896,5 +896,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 14,
   },
+
 });
 

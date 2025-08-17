@@ -1,11 +1,12 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ArrowLeft, ChevronRight, Edit, Lock, LogOut, Tag, Trash2, User, Users, X } from 'lucide-react-native';
+import { ArrowLeft, Bell, ChevronRight, Edit, Lock, LogOut, Tag, Trash2, User, Users, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
+import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { PromocodeData, promocodeService } from '../../core/services/promocodeService';
 import { SubAdminData, SubAdminPermissions, subAdminService } from '../../core/services/subAdminService';
 
@@ -476,6 +477,233 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
     );
 };
 
+// --- Notification Components ---
+const NotificationContent = ({ setModalView, setEditingNotification, notifications, onDeleteNotification }: { 
+    setModalView: any, 
+    setEditingNotification: any,
+    notifications: NotificationData[],
+    onDeleteNotification: (id: string) => void
+}) => {
+    const handleEdit = (notification: NotificationData) => {
+        setEditingNotification(notification);
+        setModalView('addOrEdit');
+    }
+
+    const handleDelete = (notification: NotificationData) => {
+        Alert.alert(
+            'Delete Notification',
+            `Are you sure you want to delete "${notification.title}"? This action cannot be undone.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => onDeleteNotification(notification.id),
+                },
+            ]
+        );
+    };
+
+
+
+    const formatDate = (timestamp: number) => {
+        return new Date(timestamp).toLocaleDateString();
+    };
+
+
+
+
+
+    return (
+        <View>
+            {notifications.map(notification => (
+                <View key={notification.id} style={styles.notificationCard}>
+                    <View style={styles.notificationHeader}>
+                        <View style={styles.notificationTitleRow}>
+                            <View style={{flex: 1}}>
+                                <Text style={styles.notificationTitle}>{notification.title}</Text>
+                            </View>
+                        </View>
+                        <View style={styles.notificationActionButtons}>
+                            <TouchableOpacity onPress={() => handleEdit(notification)}>
+                                <Edit size={20} color={Colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => handleDelete(notification)}>
+                                <Trash2 size={20} color={Colors.red} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                    
+                    <Text style={styles.notificationMessage}>{notification.message}</Text>
+                    
+                    <Text style={styles.notificationDetails}>
+                        Created: {formatDate(notification.createdAt)}
+                        {notification.expiresAt && ` • Expires: ${formatDate(notification.expiresAt)}`}
+                    </Text>
+                </View>
+            ))}
+            {notifications.length === 0 && (
+                <View style={styles.emptyState}>
+                    <Bell size={48} color={Colors.textSecondary} />
+                    <Text style={styles.emptyStateText}>No notifications created yet</Text>
+                    <Text style={styles.emptyStateSubtext}>Create your first notification to get started</Text>
+                </View>
+            )}
+            <TouchableOpacity style={styles.saveButton} onPress={() => { setEditingNotification(null); setModalView('addOrEdit'); }}>
+                <Text style={styles.saveButtonText}>Add New Notification</Text>
+            </TouchableOpacity>
+        </View>
+    );
+};
+
+const AddNotificationContent = ({ editingNotification, onSave }: { editingNotification: NotificationData | null, onSave: (data: any) => void }) => {
+    const [formData, setFormData] = useState({
+        title: '',
+        message: '',
+        type: 'announcement' as 'announcement' | 'order_update' | 'promo' | 'system',
+        priority: 'medium' as 'low' | 'medium' | 'high',
+        expiresAt: '',
+    });
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Update form data when editingNotification changes
+    useEffect(() => {
+        if (editingNotification) {
+            setFormData({
+                title: editingNotification.title || '',
+                message: editingNotification.message || '',
+                type: editingNotification.type || 'announcement',
+                priority: editingNotification.priority || 'medium',
+                expiresAt: editingNotification.expiresAt ? new Date(editingNotification.expiresAt).toISOString().split('T')[0] : '',
+            });
+        } else {
+            // Reset form for new notification
+            setFormData({
+                title: '',
+                message: '',
+                type: 'announcement',
+                priority: 'medium',
+                expiresAt: '',
+            });
+        }
+    }, [editingNotification]);
+
+    const handleSave = async () => {
+        if (!formData.title.trim() || !formData.message.trim()) {
+            Alert.alert('Error', 'Please fill in all required fields.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            await onSave({
+                title: formData.title.trim(),
+                message: formData.message.trim(),
+                type: formData.type,
+                priority: formData.priority,
+                expiresAt: formData.expiresAt ? new Date(formData.expiresAt) : undefined,
+                isEdit: !!editingNotification,
+                id: editingNotification?.id,
+            });
+        } catch (error) {
+            console.error('Error saving notification:', error);
+            Alert.alert('Error', 'An error occurred while saving.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <View>
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Title *</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.title} 
+                    onChangeText={text => setFormData({...formData, title: text})} 
+                    placeholder="Enter notification title" 
+                />
+            </View>
+            
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Message *</Text>
+                <TextInput 
+                    style={[styles.input, styles.textArea]} 
+                    value={formData.message} 
+                    onChangeText={text => setFormData({...formData, message: text})} 
+                    placeholder="Enter notification message" 
+                    multiline
+                    numberOfLines={4}
+                />
+            </View>
+
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Type</Text>
+                <View style={styles.radioGroup}>
+                    <TouchableOpacity 
+                        style={[styles.radioOption, formData.type === 'announcement' && styles.radioOptionSelected]}
+                        onPress={() => setFormData({...formData, type: 'announcement'})}
+                    >
+                        <Text style={[styles.radioText, formData.type === 'announcement' && styles.radioTextSelected]}>Announcement</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.radioOption, formData.type === 'promo' && styles.radioOptionSelected]}
+                        onPress={() => setFormData({...formData, type: 'promo'})}
+                    >
+                        <Text style={[styles.radioText, formData.type === 'promo' && styles.radioTextSelected]}>Promo</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Priority</Text>
+                <View style={styles.radioGroup}>
+                    <TouchableOpacity 
+                        style={[styles.radioOption, formData.priority === 'low' && styles.radioOptionSelected]}
+                        onPress={() => setFormData({...formData, priority: 'low'})}
+                    >
+                        <Text style={[styles.radioText, formData.priority === 'low' && styles.radioTextSelected]}>Low</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.radioOption, formData.priority === 'medium' && styles.radioOptionSelected]}
+                        onPress={() => setFormData({...formData, priority: 'medium'})}
+                    >
+                        <Text style={[styles.radioText, formData.priority === 'medium' && styles.radioTextSelected]}>Medium</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.radioOption, formData.priority === 'high' && styles.radioOptionSelected]}
+                        onPress={() => setFormData({...formData, priority: 'high'})}
+                    >
+                        <Text style={[styles.radioText, formData.priority === 'high' && styles.radioTextSelected]}>High</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+
+
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Expiration Date (Optional)</Text>
+                <TextInput 
+                    style={styles.input} 
+                    value={formData.expiresAt} 
+                    onChangeText={text => setFormData({...formData, expiresAt: text})} 
+                    placeholder="YYYY-MM-DD (leave empty for no expiration)"
+                />
+            </View>
+
+            <TouchableOpacity 
+                style={[styles.saveButton, isLoading && styles.saveButtonDisabled]} 
+                onPress={handleSave}
+                disabled={isLoading}
+            >
+                <Text style={styles.saveButtonText}>
+                    {isLoading ? 'Saving...' : (editingNotification ? 'Update Notification' : 'Create Notification')}
+                </Text>
+            </TouchableOpacity>
+        </View>
+    );
+};
+
 const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminData | null, onSave: (data: any) => void }) => {
     const [formData, setFormData] = useState({
         name: editingAdmin?.displayName || '',
@@ -624,17 +852,21 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const [editingPromocode, setEditingPromocode] = useState<PromocodeData | null>(null);
   const [promocodes, setPromocodes] = useState<PromocodeData[]>([]);
   const [isLoadingPromocodes, setIsLoadingPromocodes] = useState(false);
+  const [editingNotification, setEditingNotification] = useState<NotificationData | null>(null);
+  const [notifications, setNotifications] = useState<NotificationData[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
 
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
 
-  // Load sub-admins and promocodes when component mounts
+  // Load sub-admins, promocodes, and notifications when component mounts
   useEffect(() => {
     console.log('Component mounted, userSession:', userSession); // Debug log
     loadSubAdmins();
     loadPromocodes();
+    loadNotifications();
   }, [userSession]);
 
   // Monitor promocodes state changes
@@ -825,6 +1057,71 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
     }
   };
 
+  const loadNotifications = async () => {
+    if (!userSession?.uid) return;
+    
+    setIsLoadingNotifications(true);
+    try {
+      const adminNotifications = await notificationService.getNotificationsByAdmin(userSession.uid);
+      setNotifications(adminNotifications);
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      Alert.alert('Error', 'Failed to load notifications.');
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
+
+  const handleSaveNotification = async (data: any) => {
+    if (!userSession?.uid) {
+      return;
+    }
+
+    try {
+      if (data.isEdit) {
+        // Update existing notification
+        await notificationService.updateNotification(data.id, {
+          title: data.title,
+          message: data.message,
+          type: data.type,
+          priority: data.priority,
+          expiresAt: data.expiresAt,
+        });
+        Alert.alert('Success', 'Notification updated successfully!');
+      } else {
+        // Create new notification
+        await notificationService.createNotification(userSession.uid, {
+          title: data.title,
+          message: data.message,
+          type: data.type,
+          priority: data.priority,
+          expiresAt: data.expiresAt,
+        });
+        Alert.alert('Success', 'Notification created successfully!');
+      }
+      
+      // Reload notifications and close modal
+      await loadNotifications();
+      setModalVisible(false);
+      setModalView('list');
+      setEditingNotification(null);
+    } catch (error) {
+      console.error('Error saving notification:', error);
+      Alert.alert('Error', 'Failed to save notification. Please try again.');
+    }
+  };
+
+  const handleDeleteNotification = async (id: string) => {
+    try {
+      await notificationService.deleteNotification(id);
+      Alert.alert('Success', 'Notification permanently deleted.');
+      await loadNotifications();
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      Alert.alert('Error', 'Failed to delete notification. Please try again.');
+    }
+  };
+
 
 
   const handleLogout = async () => {
@@ -863,7 +1160,8 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
     // Only show sub-admin management for full admins, not sub-admins
     ...(userSession?.role === 'admin' ? [
       { id: '3', title: 'Sub-admin Management', icon: Users, action: () => openModal('subAdmin') },
-      { id: '4', title: 'Promocode Management', icon: Tag, action: () => openModal('promocode') }
+      { id: '4', title: 'Promocode Management', icon: Tag, action: () => openModal('promocode') },
+      { id: '5', title: 'Notification Management', icon: Bell, action: () => openModal('notification') }
     ] : []),
   ];
 
@@ -899,6 +1197,18 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
                 editingPromocode={editingPromocode} 
                 onSave={handleSavePromocode}
               />;
+          case 'notification': 
+            return modalView === 'list' ? 
+              <NotificationContent 
+                setModalView={setModalView} 
+                setEditingNotification={setEditingNotification} 
+                notifications={notifications}
+                onDeleteNotification={handleDeleteNotification}
+              /> : 
+              <AddNotificationContent 
+                editingNotification={editingNotification} 
+                onSave={handleSaveNotification}
+              />;
           default: return null;
       }
   }
@@ -911,6 +1221,10 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
       if (modalContent === 'promocode') {
           if (modalView === 'list') return 'Promocode Management';
           return editingPromocode ? 'Edit Promocode' : 'Add New Promocode';
+      }
+      if (modalContent === 'notification') {
+          if (modalView === 'list') return 'Notification Management';
+          return editingNotification ? 'Edit Notification' : 'Add New Notification';
       }
       const item = menuItems.find(item => item.action.toString().includes(modalContent));
       return item ? item.title : '';
@@ -1206,14 +1520,25 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   emptyState: {
-    padding: 20,
+    padding: 40,
     alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    marginVertical: 20,
   },
   emptyStateText: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
     fontSize: 14,
     fontFamily: 'Inter_400Regular',
     color: Colors.textSecondary,
     textAlign: 'center',
+    marginTop: 8,
   },
   // --- Promocode Styles ---
   promocodeCard: {
@@ -1309,5 +1634,59 @@ const styles = StyleSheet.create({
       height: 80,
       textAlignVertical: 'top',
   },
+  // --- Notification Styles ---
+  notificationCard: {
+      backgroundColor: Colors.surface,
+      borderRadius: 16,
+      padding: 20,
+      marginBottom: 16,
+      shadowColor: '#959DA5',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      elevation: 2,
+  },
+  notificationHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 12,
+  },
+  notificationTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+  },
+  notificationTitle: {
+      fontSize: 18,
+      fontFamily: 'Inter_600SemiBold',
+      color: Colors.text,
+      flex: 1,
+      marginBottom: 4,
+  },
+  notificationMessage: {
+      fontSize: 15,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+      lineHeight: 22,
+      marginBottom: 12,
+  },
+  notificationDetails: {
+      fontSize: 13,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+      backgroundColor: Colors.background,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      marginBottom: 16,
+  },
+
+  notificationActionButtons: {
+      flexDirection: 'row',
+      gap: 16,
+      alignItems: 'center',
+  },
+
 });
 

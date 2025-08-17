@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
-import { Alert, ArrowLeft, CheckCircle, Minus, Plus, Tag, X } from 'lucide-react-native';
-import React, { useState, useEffect } from 'react';
+import { ArrowLeft, CheckCircle, Minus, Plus, Tag, X } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import { Image, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../core/context/CartContext';
@@ -184,7 +184,7 @@ export default function CartScreen() {
       return getCartTotal();
   };
 
-  const deliveryCharge = 30;
+  const deliveryCharge = cartItems.length > 0 ? 30 : 0;
   const subtotal = calculateSubtotal();
   const gstAmount = subtotal * 0.05; // 5% GST
   const totalAmount = subtotal + deliveryCharge + gstAmount - discount;
@@ -214,9 +214,9 @@ export default function CartScreen() {
       
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
-                <ArrowLeft size={26} color={Colors.white} />
-            </TouchableOpacity>
+                    <TouchableOpacity onPress={() => router.push('/customer/products')} style={styles.headerIcon}>
+            <ArrowLeft size={26} color={Colors.white} />
+        </TouchableOpacity>
             <Text style={styles.headerTitle}>My Cart</Text>
         </View>
       </View>
@@ -332,14 +332,18 @@ export default function CartScreen() {
                     <Text style={styles.billLabel}>Item Total</Text>
                     <Text style={styles.billValue}>₹{subtotal.toFixed(2)}</Text>
                 </View>
-                <View style={styles.billRow}>
-                    <Text style={styles.billLabel}>Delivery Charge</Text>
-                    <Text style={styles.billValue}>₹{deliveryCharge.toFixed(2)}</Text>
-                </View>
-                <View style={styles.billRow}>
-                    <Text style={styles.billLabel}>GST (5%)</Text>
-                    <Text style={styles.billValue}>₹{gstAmount.toFixed(2)}</Text>
-                </View>
+                {cartItems.length > 0 && (
+                    <View style={styles.billRow}>
+                        <Text style={styles.billLabel}>Delivery Charge</Text>
+                        <Text style={styles.billValue}>₹{deliveryCharge.toFixed(2)}</Text>
+                    </View>
+                )}
+                {cartItems.length > 0 && (
+                    <View style={styles.billRow}>
+                        <Text style={styles.billLabel}>GST (5%)</Text>
+                        <Text style={styles.billValue}>₹{gstAmount.toFixed(2)}</Text>
+                    </View>
+                )}
                 {discount > 0 && (
                     <View style={styles.billRow}>
                         <Text style={[styles.billLabel, {color: Colors.green}]}>Promo Discount</Text>
@@ -356,29 +360,36 @@ export default function CartScreen() {
       </ScrollView>
 
       {/* Checkout Footer */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 70 }]}>
-        <View>
-            <Text style={styles.footerTotalAmount}>₹{totalAmount.toFixed(2)}</Text>
-            <Text style={styles.footerTotalLabel}>TOTAL</Text>
+      {cartItems.length > 0 && (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 70 }]}>
+          <View>
+              <Text style={styles.footerTotalAmount}>₹{totalAmount.toFixed(2)}</Text>
+              <Text style={styles.footerTotalLabel}>TOTAL</Text>
+          </View>
+          <TouchableOpacity 
+              style={styles.checkoutButton} 
+              onPress={async () => {
+                  if (cartItems.length === 0) {
+                      Alert.alert('Empty Cart', 'Please add items to your cart before checkout.');
+                      return;
+                  }
+                  
+                  // Increment promocode usage if applied
+                  if (appliedPromocode) {
+                      try {
+                          await promocodeService.incrementUsageCount(appliedPromocode.id);
+                          console.log('Promocode usage incremented');
+                      } catch (error) {
+                          console.error('Error incrementing promocode usage:', error);
+                      }
+                  }
+                  router.push('/customer/checkout');
+              }}
+          >
+              <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity 
-            style={styles.checkoutButton} 
-            onPress={async () => {
-                // Increment promocode usage if applied
-                if (appliedPromocode) {
-                    try {
-                        await promocodeService.incrementUsageCount(appliedPromocode.id);
-                        console.log('Promocode usage incremented');
-                    } catch (error) {
-                        console.error('Error incrementing promocode usage:', error);
-                    }
-                }
-                router.push('/customer/checkout');
-            }}
-        >
-            <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
-        </TouchableOpacity>
-      </View>
+      )}
     </View>
   );
 }
