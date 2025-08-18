@@ -78,6 +78,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               uid: firebaseUser.uid,
               email: firebaseUser.email || userData.email,
               displayName: firebaseUser.displayName || userData.displayName,
+              phoneNumber: firebaseUser.phoneNumber || userData.phoneNumber,
               role: userData.role || 'customer',
               sessionToken: SessionManager.generateSessionToken(),
               loginTime: Date.now(),

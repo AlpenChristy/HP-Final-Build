@@ -320,7 +320,9 @@ export default function ProductsScreen() {
                   <TouchableOpacity
                     style={styles.modalAddButton}
                     onPress={() => {
-                      addToCart(selectedProduct, modalQuantity);
+                      if (!selectedProduct) return;
+                      const existingQty = cartItems.find(item => item.productId === selectedProduct.id)?.quantity ?? 0;
+                      addToCart(selectedProduct, modalQuantity - existingQty);
                       closeModal();
                     }}
                   >

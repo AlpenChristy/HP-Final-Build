@@ -6,6 +6,7 @@ export interface UserSession {
   uid: string;
   email: string;
   displayName?: string;
+  phoneNumber?: string;
   role?: string;
   sessionToken: string;
   loginTime: number;

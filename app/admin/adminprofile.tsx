@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
+import { userService } from '../../core/services/userService';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { PromocodeData, promocodeService } from '../../core/services/promocodeService';
 import { SubAdminData, SubAdminPermissions, subAdminService } from '../../core/services/subAdminService';
@@ -28,20 +29,20 @@ const Colors = {
 
 
 // --- Modal Content Components ---
-const EditProfileContent = ({ user }: { user: any }) => {
-    const [formData, setFormData] = useState({ name: user?.name || '', email: user?.email || '' });
+const EditProfileContent = ({ user, onSave, isSaving }: { user: any, onSave: (data: { name: string; email: string }) => Promise<void> | void, isSaving: boolean }) => {
+    const [formData, setFormData] = useState({ name: user?.displayName || '', email: user?.email || '' });
     return (
         <View>
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Name</Text>
-                <TextInput style={styles.input} value={formData.name} onChangeText={text => setFormData({...formData, name: text})} />
+                <TextInput style={styles.input} value={formData.name} onChangeText={text => setFormData({ ...formData, name: text })} />
             </View>
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Email</Text>
-                <TextInput style={styles.input} value={formData.email} onChangeText={text => setFormData({...formData, email: text})} keyboardType="email-address" autoCapitalize="none" />
+                <TextInput style={styles.input} value={formData.email} editable={false} keyboardType="email-address" autoCapitalize="none" />
             </View>
-            <TouchableOpacity style={styles.saveButton}>
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+            <TouchableOpacity style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} disabled={isSaving} onPress={() => onSave(formData)}>
+                <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save Changes'}</Text>
             </TouchableOpacity>
         </View>
     );
@@ -842,7 +843,7 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
 
 export default function AdminProfileScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
-  const { userSession, logout } = useAuth();
+  const { userSession, logout, login } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [modalView, setModalView] = useState('list');
@@ -855,6 +856,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const [editingNotification, setEditingNotification] = useState<NotificationData | null>(null);
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
 
   let [fontsLoaded] = useFonts({
@@ -1171,7 +1173,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   
   const renderModalContent = () => {
       switch(modalContent) {
-          case 'editProfile': return <EditProfileContent user={userSession} />;
+          case 'editProfile': return <EditProfileContent user={userSession} onSave={handleSaveProfile} isSaving={isSavingProfile} />;
           case 'changePassword': return <ChangePasswordContent />;
           case 'subAdmin': 
             return modalView === 'list' ? 
@@ -1211,6 +1213,28 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
               />;
           default: return null;
       }
+  }
+
+  const handleSaveProfile = async (data: { name: string; email: string }) => {
+    if (!userSession?.uid) return;
+    const trimmedName = (data.name || '').trim();
+    if (!trimmedName) {
+      Alert.alert('Error', 'Name cannot be empty.');
+      return;
+    }
+    try {
+      setIsSavingProfile(true);
+      await userService.updateUser(userSession.uid, { displayName: trimmedName });
+      const updatedSession = { ...userSession, displayName: trimmedName };
+      await login(updatedSession);
+      Alert.alert('Success', 'Profile updated successfully.');
+      setModalVisible(false);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
+    } finally {
+      setIsSavingProfile(false);
+    }
   }
   
   const getModalTitle = () => {

@@ -9,6 +9,8 @@ import { useAddress } from '../../core/context/AddressContext';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
+import { updateEmail } from 'firebase/auth';
+import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -27,33 +29,68 @@ const Colors = {
   yellow: '#F59E0B',
 };
 
-
-
 // --- Modal Content Components ---
-const PersonalInfoContent = ({ user }) => {
+const PersonalInfoContent = ({ user, onSave, isSaving }: { user: any, onSave: (name: string, email: string) => void, isSaving: boolean }) => {
     const [isEditing, setIsEditing] = useState(false);
-    const [userInfo, setUserInfo] = useState(user);
+    const [name, setName] = useState<string>(user?.name || '');
+    const [email, setEmail] = useState<string>(user?.email || '');
+
+    useEffect(() => {
+        setName(user?.name || '');
+        setEmail(user?.email || '');
+    }, [user]);
+
+    const handlePress = () => {
+        if (!isEditing) {
+            setIsEditing(true);
+            return;
+        }
+        // Save
+        onSave(name.trim(), email.trim());
+    };
 
     return (
         <View>
             <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Name</Text>
-                {isEditing ? <TextInput style={styles.input} value={userInfo.name} onChangeText={text => setUserInfo({...userInfo, name: text})} /> : <Text style={styles.infoValue}>{userInfo.name}</Text>}
+                {isEditing ? (
+                    <TextInput
+                        style={styles.input}
+                        value={name}
+                        onChangeText={setName}
+                        placeholder="Enter your name"
+                        editable={!isSaving}
+                    />
+                ) : (
+                    <Text style={styles.infoValue}>{user?.name}</Text>
+                )}
             </View>
             <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Consumer Number</Text>
-                <Text style={styles.infoValue}>{userInfo.consumerNumber}</Text>
+                <Text style={styles.infoValue}>{user?.consumerNumber}</Text>
             </View>
             <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Registered Mobile</Text>
-                {isEditing ? <TextInput style={styles.input} value={userInfo.mobile} onChangeText={text => setUserInfo({...userInfo, mobile: text})} /> : <Text style={styles.infoValue}>{userInfo.mobile}</Text>}
+                <Text style={styles.infoValue}>{user?.mobile}</Text>
             </View>
             <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Email Address</Text>
-                {isEditing ? <TextInput style={styles.input} value={userInfo.email} onChangeText={text => setUserInfo({...userInfo, email: text})} /> : <Text style={styles.infoValue}>{userInfo.email}</Text>}
+                {isEditing ? (
+                    <TextInput
+                        style={styles.input}
+                        value={email}
+                        onChangeText={setEmail}
+                        placeholder="Enter your email"
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                        editable={!isSaving}
+                    />
+                ) : (
+                    <Text style={styles.infoValue}>{user?.email}</Text>
+                )}
             </View>
-            <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(!isEditing)}>
-                <Text style={styles.editButtonText}>{isEditing ? 'Save Changes' : 'Edit Details'}</Text>
+            <TouchableOpacity style={[styles.editButton, isSaving && { opacity: 0.7 }]} disabled={isSaving} onPress={handlePress}>
+                <Text style={styles.editButtonText}>{isEditing ? (isSaving ? 'Saving...' : 'Save Changes') : 'Edit Details'}</Text>
             </TouchableOpacity>
         </View>
     );
@@ -349,7 +386,7 @@ const ForgotPasswordContent = () => (
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { userSession, logout } = useAuth();
+  const { userSession, logout, login } = useAuth();
   const { address, updateAddress, isLoading: addressLoading } = useAddress();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
@@ -472,6 +509,53 @@ export default function ProfileScreen() {
       setModalVisible(true);
   }
 
+  const [isSavingPersonal, setIsSavingPersonal] = useState(false);
+
+  const handleSavePersonalInfo = async (name: string, email: string) => {
+    if (!userSession?.uid) return;
+
+    // Simple validations
+    if (!name) {
+      Alert.alert('Validation', 'Name cannot be empty.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Validation', 'Please enter a valid email address.');
+      return;
+    }
+
+    setIsSavingPersonal(true);
+    try {
+      // 1) Update in Firestore
+      await userService.updateUser(userSession.uid, { displayName: name, email });
+
+      // 2) Try to update Firebase Auth email as well (might require recent login)
+      const currentUser = FIREBASE_AUTH.currentUser;
+      if (currentUser && currentUser.email !== email) {
+        try {
+          await updateEmail(currentUser, email);
+        } catch (err) {
+          console.warn('Failed to update Firebase Auth email, keeping Firestore and session email:', err);
+        }
+      }
+
+      // 3) Refresh local session
+      await login({ ...userSession, displayName: name, email });
+
+      // 4) Update local screen state
+      setUserData(prev => prev ? { ...prev, displayName: name, email } : prev);
+
+      setModalVisible(false);
+      Alert.alert('Success', 'Profile updated successfully.');
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
+    } finally {
+      setIsSavingPersonal(false);
+    }
+  };
+
   const menuItems = [
     { id: '1', title: 'Personal Information', icon: User, action: () => openModal('personal') },
     { id: '2', title: 'Delivery Address', icon: MapPin, action: () => openModal('address') },
@@ -484,11 +568,9 @@ export default function ProfileScreen() {
     return <View style={styles.loadingContainer} />;
   }
 
-
-  
   const renderModalContent = () => {
       switch(modalContent) {
-          case 'personal': return <PersonalInfoContent user={user} />;
+          case 'personal': return <PersonalInfoContent user={user} onSave={handleSavePersonalInfo} isSaving={isSavingPersonal} />;
           case 'address': return <DeliveryAddressContent user={user} onUpdateAddress={handleUpdateAddress} />;
           case 'notifications': return <NotificationsContent notifications={notifications} isLoading={isLoadingNotifications} />;
           case 'help': return <HelpSupportContent />;
@@ -497,7 +579,7 @@ export default function ProfileScreen() {
           default: return null;
       }
   }
-  
+
   const getModalTitle = () => {
       switch(modalContent) {
           case 'personal': return 'Personal Information';

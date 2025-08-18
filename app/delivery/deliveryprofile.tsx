@@ -6,6 +6,9 @@ import React, { useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
+import { userService } from '../../core/services/userService';
+import { updateEmail } from 'firebase/auth';
+import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 
 // --- Red Color Palette ---
 const Colors = {
@@ -23,7 +26,7 @@ const Colors = {
 
 
 // --- Modal Content Components ---
-const EditProfileContent = ({ user }: { user: any }) => {
+const EditProfileContent = ({ user, onSave, isSaving }: { user: any, onSave: (name: string, phone: string, email: string) => void, isSaving: boolean }) => {
     const [formData, setFormData] = useState({ 
         name: user?.displayName || '', 
         phone: user?.phoneNumber || '', 
@@ -33,24 +36,24 @@ const EditProfileContent = ({ user }: { user: any }) => {
         <View>
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Name</Text>
-                <TextInput style={styles.input} value={formData.name} onChangeText={text => setFormData({...formData, name: text})} />
+                <TextInput style={styles.input} value={formData.name} onChangeText={text => setFormData({...formData, name: text})} editable={!isSaving} />
             </View>
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Phone Number</Text>
-                <TextInput style={styles.input} value={formData.phone} onChangeText={text => setFormData({...formData, phone: text})} keyboardType="phone-pad" />
+                <TextInput style={styles.input} value={formData.phone} onChangeText={text => setFormData({...formData, phone: text})} keyboardType="phone-pad" editable={!isSaving} />
             </View>
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Email</Text>
-                <TextInput style={styles.input} value={formData.email} onChangeText={text => setFormData({...formData, email: text})} keyboardType="email-address" />
+                <TextInput style={styles.input} value={formData.email} onChangeText={text => setFormData({...formData, email: text})} keyboardType="email-address" autoCapitalize="none" editable={!isSaving} />
             </View>
-            <TouchableOpacity style={styles.saveButton}>
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+            <TouchableOpacity style={[styles.saveButton, isSaving && { opacity: 0.7 }]} disabled={isSaving} onPress={() => onSave(formData.name.trim(), formData.phone.trim(), formData.email.trim())}>
+                <Text style={styles.saveButtonText}>{isSaving ? 'Saving...' : 'Save Changes'}</Text>
             </TouchableOpacity>
         </View>
     );
 };
 
-const ChangePasswordContent = ({ onForgotPassword }) => (
+const ChangePasswordContent = ({ onForgotPassword }: { onForgotPassword: () => void }) => (
     <View>
         <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Current Password</Text>
@@ -88,10 +91,12 @@ const ForgotPasswordContent = () => (
 
 export default function DeliveryAgentProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { userSession, logout } = useAuth();
+  const { userSession, logout, login } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [modalView, setModalView] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileData, setProfileData] = useState<any>(userSession);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
@@ -120,9 +125,19 @@ export default function DeliveryAgentProfileScreen() {
     );
   };
 
-  const openModal = (contentKey: string) => {
+  const openModal = async (contentKey: string) => {
       setModalContent(contentKey);
       setModalView(contentKey); // Set initial view
+      if (contentKey === 'editProfile' && userSession?.uid) {
+        try {
+          const fresh = await userService.getUserById(userSession.uid);
+          if (fresh) {
+            setProfileData({ ...userSession, ...fresh });
+          }
+        } catch (e) {
+          console.warn('Failed to fetch latest user profile:', e);
+        }
+      }
       setModalVisible(true);
   }
 
@@ -137,12 +152,59 @@ export default function DeliveryAgentProfileScreen() {
   
   const renderModalContent = () => {
       switch(modalView) {
-          case 'editProfile': return <EditProfileContent user={userSession} />;
+          case 'editProfile': return <EditProfileContent user={profileData || userSession} onSave={handleSaveProfile} isSaving={isSavingProfile} />;
           case 'changePassword': return <ChangePasswordContent onForgotPassword={() => setModalView('forgotPassword')} />;
           case 'forgotPassword': return <ForgotPasswordContent />;
           default: return null;
       }
   }
+
+  const handleSaveProfile = async (name: string, phone: string, email: string) => {
+    if (!userSession?.uid) return;
+
+    if (!name) {
+      Alert.alert('Validation', 'Name cannot be empty.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Validation', 'Please enter a valid email address.');
+      return;
+    }
+    if (phone && phone.replace(/\D/g, '').length < 10) {
+      Alert.alert('Validation', 'Please enter a valid phone number.');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      // Update Firestore user data
+      await userService.updateUser(userSession.uid, { displayName: name, email, phoneNumber: phone });
+
+      // Try updating Firebase Auth email (may require recent login)
+      const currentUser = FIREBASE_AUTH.currentUser;
+      if (currentUser && currentUser.email !== email) {
+        try {
+          await updateEmail(currentUser, email);
+        } catch (err) {
+          console.warn('Failed to update Firebase Auth email:', err);
+        }
+      }
+
+      // Refresh local session (include phone)
+      const updatedSession = { ...userSession, displayName: name, email, phoneNumber: phone };
+      await login(updatedSession);
+      setProfileData(updatedSession);
+
+      setModalVisible(false);
+      Alert.alert('Success', 'Profile updated successfully.');
+    } catch (error) {
+      console.error('Error updating delivery profile:', error);
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
   
   const getModalTitle = () => {
       if (modalView === 'forgotPassword') return 'Forgot Password';
@@ -159,7 +221,7 @@ export default function DeliveryAgentProfileScreen() {
         style={[styles.header, { paddingTop: insets.top + 10 }]}
       >
         <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerIcon}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
                 <ArrowLeft size={26} color={Colors.white} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>My Profile</Text>
@@ -172,6 +234,9 @@ export default function DeliveryAgentProfileScreen() {
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{userSession?.displayName || 'Delivery Agent'}</Text>
             <Text style={styles.profileEmail}>{userSession?.email || ''}</Text>
+            {userSession?.phoneNumber ? (
+              <Text style={styles.profilePhone}>{userSession.phoneNumber}</Text>
+            ) : null}
             <Text style={styles.profileRole}>Delivery Agent</Text>
           </View>
         </View>
@@ -285,6 +350,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   profileEmail: {
+    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    marginBottom: 8,
+  },
+  profilePhone: {
     fontSize: 16,
     fontFamily: 'Inter_400Regular',
     color: Colors.textSecondary,

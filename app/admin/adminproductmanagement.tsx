@@ -40,7 +40,6 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
     type: 'gas',
     price: '',
     originalPrice: '',
-    deliveryCharge: '',
     description: '',
     inStock: true,
     quantity: '',
@@ -77,7 +76,6 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
         type: product.type,
         price: product.price.toString(),
         originalPrice: product.originalPrice?.toString() || '',
-        deliveryCharge: product.deliveryCharge?.toString() || '',
         description: product.description,
         inStock: product.inStock,
         quantity: product.quantity?.toString() || '',
@@ -90,7 +88,6 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
         type: 'gas',
         price: '',
         originalPrice: '',
-        deliveryCharge: '',
         description: '',
         inStock: true,
         quantity: '',
@@ -176,7 +173,6 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
         type: formData.type,
         price: parseFloat(formData.price),
         originalPrice: parseFloat(formData.originalPrice) || undefined,
-        deliveryCharge: parseFloat(formData.deliveryCharge) || undefined,
         description: formData.description.trim(),
         image: selectedImage!,
         inStock: formData.inStock,
@@ -413,18 +409,6 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
                       value={formData.originalPrice}
                       onChangeText={(text) => setFormData({ ...formData, originalPrice: text })}
                       placeholder="e.g., 900"
-                      keyboardType="numeric"
-                      placeholderTextColor="#94A3B8"
-                    />
-                  </View>
-
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Delivery Charge (₹)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={formData.deliveryCharge}
-                      onChangeText={(text) => setFormData({ ...formData, deliveryCharge: text })}
-                      placeholder="e.g., 30"
                       keyboardType="numeric"
                       placeholderTextColor="#94A3B8"
                     />

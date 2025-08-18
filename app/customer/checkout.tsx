@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
 import { ArrowLeft, MapPin } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -39,14 +39,17 @@ export default function CheckoutScreen() {
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [newAddress, setNewAddress] = useState('');
   const [isSavingAddress, setIsSavingAddress] = useState(false);
+  // Suppress empty-cart alert when we purposely cleared cart after placing order
+  const suppressEmptyCartAlert = useRef(false);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,
   });
 
-  // Check if cart is empty and redirect
+  // Check if cart is empty and redirect (ignored when suppressed, e.g., after placing order)
   useEffect(() => {
     if (cartItems.length === 0) {
+      if (suppressEmptyCartAlert.current) return;
       Alert.alert('Empty Cart', 'Your cart is empty. Please add items to your cart before checkout.', [
         {
           text: 'OK',
@@ -133,6 +136,7 @@ export default function CheckoutScreen() {
     }
 
     setIsPlacingOrder(true);
+    suppressEmptyCartAlert.current = true; // prevent empty-cart alert after we clear the cart
     try {
       const orderData: CreateOrderData = {
         userId: userSession.uid,
