@@ -1,6 +1,6 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
-import { useLocalSearchParams } from 'expo-router';
-import { Check, Clock, Hash, MapPin, Phone, ShoppingBag, Truck, Wallet } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Check, Clock, Hash, MapPin, Phone, ShoppingBag, Truck, Wallet, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Linking, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,6 +36,7 @@ interface OrderCompleteData {
 export default function OrderPlacedScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
+  const router = useRouter();
   const [orderData, setOrderData] = useState<OrderCompleteData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -105,6 +106,17 @@ export default function OrderPlacedScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       
+      {/* Close (cross) button */}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        onPress={() => router.back()}
+        style={[styles.closeButton, { top: insets.top + 8 }]}
+        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+      >
+        <X size={20} color={Colors.text} />
+      </TouchableOpacity>
+       
       <ScrollView contentContainerStyle={styles.content}>
         {/* Success Header */}
         <View style={styles.successContainer}>
@@ -366,5 +378,21 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontFamily: 'Inter_600SemiBold',
     fontSize: 16,
+  },
+  closeButton: {
+    position: 'absolute',
+    right: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    zIndex: 10,
   },
 });

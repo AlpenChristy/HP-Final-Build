@@ -1,5 +1,5 @@
 // File: core/services/orderService.ts
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { CartItem } from '../context/CartContext';
 import { FIREBASE_DB } from '../firebase/firebase';
 import { getProductById, updateProduct } from './productService';
@@ -279,6 +279,22 @@ export const orderService = {
     }
   },
 
+  // Subscribe to all orders in real-time (for admin)
+  subscribeAllOrders(onChange: (orders: OrderData[]) => void): () => void {
+    const q = query(
+      collection(FIREBASE_DB, 'orders'),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const orders: OrderData[] = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as any),
+      })) as OrderData[];
+      onChange(orders);
+    });
+    return unsubscribe;
+  },
+
   // Get orders by status
   async getOrdersByStatus(status: OrderData['orderStatus']): Promise<OrderData[]> {
     try {
@@ -329,6 +345,21 @@ export const orderService = {
       console.error('Error getting orders by delivery agent:', error);
       throw error;
     }
+  },
+
+  // Subscribe to orders by user in real-time (for customer views)
+  subscribeOrdersByUser(userId: string, onChange: (orders: OrderData[]) => void): () => void {
+    const q = query(
+      collection(FIREBASE_DB, 'orders'),
+      where('userId', '==', userId)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const orders: OrderData[] = snapshot.docs
+        .map((d) => ({ id: d.id, ...(d.data() as any) })) as OrderData[];
+      // Sort in memory to keep newest first
+      onChange(orders.sort((a, b) => b.createdAt - a.createdAt));
+    });
+    return unsubscribe;
   },
 
   // Delete order

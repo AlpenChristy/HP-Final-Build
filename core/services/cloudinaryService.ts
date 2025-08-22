@@ -5,8 +5,15 @@ import * as ImagePicker from 'expo-image-picker';
 const CLOUDINARY_CLOUD_NAME = 'dgrrv8qh9';
 const CLOUDINARY_UPLOAD_PRESET = 'rn_product_upload'; // Create this in your Cloudinary dashboard
 
+// Optional picker options so callers can choose to crop or not
+type PickerOptions = {
+  allowsEditing?: boolean;
+  aspect?: [number, number];
+  quality?: number;
+};
+
 // Function to pick an image from the device
-export const pickImage = async () => {
+export const pickImage = async (options?: PickerOptions) => {
   // Request permission
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   
@@ -18,9 +25,9 @@ export const pickImage = async () => {
   // Pick the image
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
-    aspect: [4, 3],
-    quality: 0.8,
+    allowsEditing: options?.allowsEditing ?? false,
+    aspect: options?.aspect,
+    quality: options?.quality ?? 0.8,
   });
   
   if (!result.canceled) {
@@ -74,7 +81,7 @@ export const uploadToCloudinary = async (imageUri: string) => {
 };
 
 // Function to take a photo with the camera
-export const takePhoto = async () => {
+export const takePhoto = async (options?: PickerOptions) => {
   // Request permission
   const { status } = await ImagePicker.requestCameraPermissionsAsync();
   
@@ -85,9 +92,9 @@ export const takePhoto = async () => {
   
   // Launch camera
   const result = await ImagePicker.launchCameraAsync({
-    allowsEditing: true,
-    aspect: [4, 3],
-    quality: 0.8,
+    allowsEditing: options?.allowsEditing ?? false,
+    aspect: options?.aspect,
+    quality: options?.quality ?? 0.8,
   });
   
   if (!result.canceled) {

@@ -5,7 +5,7 @@ import { FIREBASE_DB } from '../firebase/firebase';
 // User data interface
 export interface UserData {
   uid: string;
-  email: string;
+  email?: string;
   displayName: string;
   role: string;
   phoneNumber?: string;

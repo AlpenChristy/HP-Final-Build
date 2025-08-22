@@ -7,8 +7,10 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
+    Dimensions
 } from 'react-native';
+
 // Import the hook to get safe area dimensions
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { ArrowRight, Flame, ShoppingCart, Tag } from 'lucide-react-native';
@@ -49,6 +51,7 @@ export default function CustomerHomeScreen() {
   // State for featured promocodes
   const [featuredPromocodes, setFeaturedPromocodes] = useState<PromocodeData[]>([]);
   const [isLoadingPromocodes, setIsLoadingPromocodes] = useState(true);
+  const [activePromoIndex, setActivePromoIndex] = useState(0);
 
   // Load featured promocodes on component mount
   useEffect(() => {
@@ -160,32 +163,79 @@ export default function CustomerHomeScreen() {
             <View style={styles.mainContent}>
                 {/* --- Dynamic Offer Banner with Promocodes --- */}
                 {!isLoadingPromocodes && featuredPromocodes.length > 0 ? (
-                  // Show featured promocodes
-                  featuredPromocodes.map((promocode, index) => (
+                  featuredPromocodes.length > 1 ? (
+                    <View>
+                      <ScrollView
+                        horizontal
+                        pagingEnabled
+                        showsHorizontalScrollIndicator={false}
+                        onMomentumScrollEnd={(e) => {
+                          const { contentOffset, layoutMeasurement } = e.nativeEvent;
+                          const index = Math.round(contentOffset.x / layoutMeasurement.width);
+                          setActivePromoIndex(index);
+                        }}
+                      >
+                        {featuredPromocodes.map((promocode) => (
+                          <View key={promocode.id} style={{ width: Dimensions.get('window').width - 40 }}>
+                            <View style={styles.carouselItemWrapper}>
+                              <LinearGradient
+                                colors={[Colors.primaryLight, Colors.primary]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.offerBanner}
+                              >
+                                <Tag size={90} color={Colors.white} style={styles.offerBannerIcon} />
+                                <View style={styles.offerTextContainer}>
+                                  <Text style={styles.offerTitle}>{getOfferTitle(promocode)}</Text>
+                                  <Text style={styles.offerSubtitle}>{getDiscountText(promocode)}</Text>
+                                  {promocode.minOrderAmount && (
+                                    <Text style={styles.offerMinAmount}>Min. Order: ₹{promocode.minOrderAmount}</Text>
+                                  )}
+                                </View>
+                                <TouchableOpacity 
+                                  style={styles.offerButton} 
+                                  onPress={() => handleClaimOffer(promocode)}
+                                >
+                                  <Text style={styles.offerButtonText}>Use Code</Text>
+                                  <ArrowRight size={16} color={Colors.white} />
+                                </TouchableOpacity>
+                              </LinearGradient>
+                            </View>
+                          </View>
+                        ))}
+                      </ScrollView>
+                      {/* Dots */}
+                      <View style={styles.dotsContainer}>
+                        {featuredPromocodes.map((_, i) => (
+                          <View key={i} style={[styles.dot, i === activePromoIndex && styles.dotActive]} />
+                        ))}
+                      </View>
+                    </View>
+                  ) : (
+                    // Single banner
                     <LinearGradient
-                      key={promocode.id}
                       colors={[Colors.primaryLight, Colors.primary]}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
-                      style={[styles.offerBanner, index > 0 && styles.offerBannerMargin]}
+                      style={styles.offerBanner}
                     >
                       <Tag size={90} color={Colors.white} style={styles.offerBannerIcon} />
                       <View style={styles.offerTextContainer}>
-                        <Text style={styles.offerTitle}>{getOfferTitle(promocode)}</Text>
-                        <Text style={styles.offerSubtitle}>{getDiscountText(promocode)}</Text>
-                        {promocode.minOrderAmount && (
-                          <Text style={styles.offerMinAmount}>Min. Order: ₹{promocode.minOrderAmount}</Text>
+                        <Text style={styles.offerTitle}>{getOfferTitle(featuredPromocodes[0])}</Text>
+                        <Text style={styles.offerSubtitle}>{getDiscountText(featuredPromocodes[0])}</Text>
+                        {featuredPromocodes[0].minOrderAmount && (
+                          <Text style={styles.offerMinAmount}>Min. Order: ₹{featuredPromocodes[0].minOrderAmount}</Text>
                         )}
                       </View>
                       <TouchableOpacity 
                         style={styles.offerButton} 
-                        onPress={() => handleClaimOffer(promocode)}
+                        onPress={() => handleClaimOffer(featuredPromocodes[0])}
                       >
                         <Text style={styles.offerButtonText}>Use Code</Text>
                         <ArrowRight size={16} color={Colors.white} />
                       </TouchableOpacity>
                     </LinearGradient>
-                  ))
+                  )
                 ) : (
                   // Fallback to default offer banner
                   <LinearGradient
@@ -204,10 +254,11 @@ export default function CustomerHomeScreen() {
                       <ArrowRight size={16} color={Colors.white} />
                     </TouchableOpacity>
                   </LinearGradient>
-                )}
+                )
+              }
 
-                {/* --- Main Action Grid --- */}
-                <View style={styles.gridContainer}>
+              {/* --- Main Action Grid --- */}
+              <View style={styles.gridContainer}>
                 <TouchableOpacity style={[styles.card, styles.cardLarge]} onPress={handleOrderRefill}>
                     <View style={styles.cardContent}>
                     <Text style={styles.cardTitle}>Order a Refill</Text>
@@ -314,6 +365,9 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
+  carouselItemWrapper: {
+    paddingHorizontal: 0,
+  },
   offerBannerMargin: {
     marginTop: 16,
   },
@@ -361,6 +415,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 14,
     marginRight: 8,
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    gap: 6,
+    marginTop: -12,
+    marginBottom: 24,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(13, 71, 161, 0.3)',
+  },
+  dotActive: {
+    backgroundColor: Colors.primary,
   },
   gridContainer: {
     marginBottom: 24,

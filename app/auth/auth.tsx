@@ -22,6 +22,7 @@ import { userService } from '../../core/services/userService';
 import { subAdminService } from '../../core/services/subAdminService';
 import { deliveryAuthService } from '../../core/services/deliveryAuthService';
 import { SessionManager, UserSession } from '../../core/session/sessionManager';
+import { customerAuthService } from '../../core/services/customerAuthService';
 
 // Get screen dimensions for responsive design
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -37,6 +38,7 @@ interface FormData {
 export default function AuthScreen() {
   const { login } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
+  const [usePhoneAuth, setUsePhoneAuth] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<FormData>({
@@ -54,8 +56,16 @@ export default function AuthScreen() {
         Alert.alert('Error', 'Passwords do not match.');
         return false;
       }
-      if (!formData.name || !formData.email || !formData.password) {
+      if (!formData.name || !formData.password) {
         Alert.alert('Error', 'Please fill all required fields for registration.');
+        return false;
+      }
+      if (!usePhoneAuth && !formData.email) {
+        Alert.alert('Error', 'Please enter an email for registration or switch to phone.');
+        return false;
+      }
+      if (usePhoneAuth && !formData.phone) {
+        Alert.alert('Error', 'Please enter a phone number for registration or switch to email.');
         return false;
       }
       if (formData.password.length < 6) {
@@ -64,8 +74,16 @@ export default function AuthScreen() {
       }
     } else {
       // Login validation
-      if (!formData.email || !formData.password) {
-        Alert.alert('Error', 'Please fill all fields to log in.');
+      if (!formData.password) {
+        Alert.alert('Error', 'Please enter your password.');
+        return false;
+      }
+      if (!usePhoneAuth && !formData.email) {
+        Alert.alert('Error', 'Please enter your email or switch to phone login.');
+        return false;
+      }
+      if (usePhoneAuth && !formData.phone) {
+        Alert.alert('Error', 'Please enter your phone number or switch to email login.');
         return false;
       }
     }
@@ -73,120 +91,170 @@ export default function AuthScreen() {
   };
 
   const handleSubmit = async () => {
-  if (isLoading || !validateForm()) return;
+    if (isLoading || !validateForm()) return;
 
-  setIsLoading(true);
+    setIsLoading(true);
 
-  try {
-    let userCredential;
-    let userData;
+    try {
+      let userCredential;
+      let userData;
 
-    if (isLogin) {
-      try {
-        // First try Firebase Auth login
-        userCredential = await signInWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
-        
-        // Get user data from Firestore
-        userData = await userService.getUserById(userCredential.user.uid);
-      } catch (firebaseError: any) {
-        // If Firebase Auth fails, try delivery agent authentication
-        console.log('Firebase Auth failed, trying delivery agent auth...');
-        
-        try {
-          const deliverySession = await deliveryAuthService.authenticateDeliveryAgent(formData.email, formData.password);
-          
-          if (deliverySession) {
-            // Use the auth context to handle login
-            await login(deliverySession);
-            
+      if (isLogin) {
+        if (usePhoneAuth) {
+          // Customer login via phone
+          const phoneSession = await customerAuthService.authenticateByPhone(formData.phone, formData.password);
+          if (phoneSession) {
+            await login(phoneSession);
             Alert.alert('Success', 'Login successful!');
-            
-            // Redirect to delivery dashboard
             setTimeout(() => {
-              router.replace('/delivery/deliverydashboard');
+              if (phoneSession.role === 'admin' || phoneSession.role === 'sub-admin') {
+                router.replace('/admin');
+              } else if (phoneSession.role === 'delivery') {
+                router.replace('/delivery/deliverydashboard');
+              } else {
+                router.replace('/customer/home');
+              }
             }, 300);
-            
-            return; // Exit early for delivery agent login
+            return;
           }
-        } catch (deliveryError) {
-          console.log('Delivery auth also failed');
-        }
-        
-        // If both Firebase Auth and delivery auth fail, throw the original Firebase error
-        throw firebaseError;
-      }
-    } else {
-      // Register with Firebase
-      userCredential = await createUserWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
-      
-      // Update Firebase Auth profile
-      await updateProfile(userCredential.user, {
-        displayName: formData.name
-      });
-      
-      // Create user in Firestore
-      await userService.createUser({
-        uid: userCredential.user.uid,
-        email: formData.email,
-        displayName: formData.name,
-        phoneNumber: formData.phone,
-        role: 'customer' // Default role for new users
-      });
-      
-      // Get the created user data
-      userData = await userService.getUserById(userCredential.user.uid);
-    }
-
-    // Get permissions if user is a sub-admin
-    let permissions = undefined;
-    if (userData?.role === 'sub-admin') {
-      const subAdminData = await subAdminService.getSubAdminById(userCredential.user.uid);
-      if (subAdminData) {
-        permissions = subAdminData.permissions;
-      }
-    }
-
-    // Create and save session after successful authentication
-    const userSession: UserSession = {
-      uid: userCredential.user.uid,
-      email: userCredential.user.email || formData.email,
-      displayName: userCredential.user.displayName || formData.name,
-      role: userData?.role || 'customer', // Use role from Firestore
-      sessionToken: SessionManager.generateSessionToken(),
-      loginTime: Date.now(),
-      permissions,
-    };
-
-    // Use the auth context to handle login
-    await login(userSession);
-
-    Alert.alert('Success', `${isLogin ? 'Login' : 'Registration'} successful!`);
-
-    // Add a slight delay before navigation to ensure session is saved
-    setTimeout(() => {
-      try {
-        // Redirect based on role
-        if (userSession.role === 'admin' || userSession.role === 'sub-admin') {
-          router.replace('/admin');
-        } else if (userSession.role === 'delivery') {
-          router.replace('/delivery/deliverydashboard');
         } else {
-          router.replace('/customer/home');
+          try {
+            // First try Firebase Auth login (email)
+            userCredential = await signInWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
+            // Get user data from Firestore
+            userData = await userService.getUserById(userCredential.user.uid);
+          } catch (firebaseError: any) {
+            // If Firebase Auth fails, try delivery agent authentication (email based)
+            console.log('Firebase Auth failed, trying delivery agent auth...');
+            try {
+              const deliverySession = await deliveryAuthService.authenticateDeliveryAgent(formData.email, formData.password);
+              if (deliverySession) {
+                await login(deliverySession);
+                Alert.alert('Success', 'Login successful!');
+                setTimeout(() => {
+                  router.replace('/delivery/deliverydashboard');
+                }, 300);
+                return;
+              }
+            } catch (deliveryError) {
+              console.log('Delivery auth also failed');
+            }
+            // If both email flows fail, throw the original Firebase error
+            throw firebaseError;
+          }
         }
-      } catch (error) {
-        console.error('Navigation error after auth:', error);
+      } else {
+        if (usePhoneAuth) {
+          // Register customer via phone (custom auth)
+          const created = await customerAuthService.registerWithPhone(formData.name, formData.phone, formData.password);
+          // Build session for new phone-based user
+          const phoneSession: UserSession = {
+            uid: created.uid,
+            phoneNumber: formData.phone,
+            displayName: formData.name,
+            role: 'customer',
+            sessionToken: SessionManager.generateSessionToken(),
+            loginTime: Date.now(),
+          };
+          await login(phoneSession);
+          Alert.alert('Success', 'Registration successful!');
+          setTimeout(() => {
+            router.replace('/customer/home');
+          }, 300);
+          return;
+        } else {
+          // Register with Firebase (email)
+          userCredential = await createUserWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
+          // Update Firebase Auth profile
+          await updateProfile(userCredential.user, {
+            displayName: formData.name
+          });
+          // Create user in Firestore
+          await userService.createUser({
+            uid: userCredential.user.uid,
+            email: formData.email,
+            displayName: formData.name,
+            phoneNumber: formData.phone,
+            role: 'customer'
+          });
+          // Get the created user data
+          userData = await userService.getUserById(userCredential.user.uid);
+
+          // Permissions for sub-admins (unlikely at registration but keep consistent)
+          let permissions = undefined;
+          if (userData?.role === 'sub-admin') {
+            const subAdminData = await subAdminService.getSubAdminById(userCredential.user.uid);
+            if (subAdminData) permissions = subAdminData.permissions;
+          }
+
+          // Create and save session for email-based registration
+          const emailSession: UserSession = {
+            uid: userCredential.user.uid,
+            email: userCredential.user.email || formData.email || undefined,
+            displayName: userCredential.user.displayName || formData.name,
+            phoneNumber: userData?.phoneNumber,
+            role: userData?.role || 'customer',
+            sessionToken: SessionManager.generateSessionToken(),
+            loginTime: Date.now(),
+            permissions,
+          };
+          await login(emailSession);
+          Alert.alert('Success', 'Registration successful!');
+          setTimeout(() => {
+            if (emailSession.role === 'admin' || emailSession.role === 'sub-admin') {
+              router.replace('/admin');
+            } else if (emailSession.role === 'delivery') {
+              router.replace('/delivery/deliverydashboard');
+            } else {
+              router.replace('/customer/home');
+            }
+          }, 300);
+          return;
+        }
       }
-    }, 300);
-  } catch (error: any) {
-    console.error('Authentication error:', error);
-    Alert.alert(
-      'Authentication Error',
-      error.message || 'An error occurred during authentication.'
-    );
-  } finally {
-    setIsLoading(false);
-  }
-};
+      // For email-based login (non-registration) where userCredential is defined above
+      if (!usePhoneAuth && isLogin && userCredential) {
+        // Get permissions if user is a sub-admin
+        let permissions = undefined;
+        if (userData?.role === 'sub-admin') {
+          const subAdminData = await subAdminService.getSubAdminById(userCredential.user.uid);
+          if (subAdminData) permissions = subAdminData.permissions;
+        }
+
+        const emailLoginSession: UserSession = {
+          uid: userCredential.user.uid,
+          email: userCredential.user.email || formData.email || undefined,
+          displayName: userCredential.user.displayName || formData.name,
+          phoneNumber: userData?.phoneNumber,
+          role: userData?.role || 'customer',
+          sessionToken: SessionManager.generateSessionToken(),
+          loginTime: Date.now(),
+          permissions,
+        };
+
+        await login(emailLoginSession);
+        Alert.alert('Success', 'Login successful!');
+        setTimeout(() => {
+          if (emailLoginSession.role === 'admin' || emailLoginSession.role === 'sub-admin') {
+            router.replace('/admin');
+          } else if (emailLoginSession.role === 'delivery') {
+            router.replace('/delivery/deliverydashboard');
+          } else {
+            router.replace('/customer/home');
+          }
+        }, 300);
+        return;
+      }
+    } catch (error: any) {
+      console.error('Authentication error:', error);
+      Alert.alert(
+        'Authentication Error',
+        error.message || 'An error occurred during authentication.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const updateFormData = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -233,6 +301,20 @@ export default function AuthScreen() {
             <Text style={[styles.toggleText, !isLogin && styles.activeToggleText]}>Register</Text>
           </TouchableOpacity>
         </View>
+        <View style={styles.toggleContainer}>
+          <TouchableOpacity
+            style={[styles.toggleButton, !usePhoneAuth && styles.activeToggle]}
+            onPress={() => setUsePhoneAuth(false)}
+          >
+            <Text style={[styles.toggleText, !usePhoneAuth && styles.activeToggleText]}>Use Email</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleButton, usePhoneAuth && styles.activeToggle]}
+            onPress={() => setUsePhoneAuth(true)}
+          >
+            <Text style={[styles.toggleText, usePhoneAuth && styles.activeToggleText]}>Use Phone</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.inputContainer}>
           {!isLogin && (
@@ -248,20 +330,20 @@ export default function AuthScreen() {
             </View>
           )}
 
-          <View style={styles.inputWrapper}>
-            <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Email Address"
-              value={formData.email}
-              onChangeText={(text) => updateFormData('email', text)}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholderTextColor={Colors.textSecondary}
-            />
-          </View>
-
-          {!isLogin && (
+          {!usePhoneAuth ? (
+            <View style={styles.inputWrapper}>
+              <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email Address"
+                value={formData.email}
+                onChangeText={(text) => updateFormData('email', text)}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholderTextColor={Colors.textSecondary}
+              />
+            </View>
+          ) : (
             <View style={styles.inputWrapper}>
               <Phone size={20} color={Colors.textSecondary} style={styles.inputIcon} />
               <TextInput

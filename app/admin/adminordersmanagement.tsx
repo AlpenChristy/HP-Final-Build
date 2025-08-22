@@ -3,24 +3,25 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Check, Plus, Search, Trash2, User, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
+import { PanGestureHandler } from 'react-native-gesture-handler';
 import Animated, {
     useAnimatedGestureHandler,
     useAnimatedStyle,
     useSharedValue,
     withSpring
 } from 'react-native-reanimated';
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DeliveryAgent, deliveryAgentService } from '../../core/services/deliveryAgentService';
 import { OrderData, orderService } from '../../core/services/orderService';
 import { Product, getProducts } from '../../core/services/productService';
+import { router } from 'expo-router';
+import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 
 // Navigation type
 interface AdminOrdersScreenProps {
   navigation: any;
 }
-
-
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -38,8 +39,16 @@ const Colors = {
   red: '#DC2626',
 };
 
+// Helper to format currency values to two decimal places
+const formatAmount = (value: number | string | undefined | null) => {
+  const num = Number(value ?? 0);
+  if (isNaN(num)) return '0.00';
+  return num.toFixed(2);
+};
+
 export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps) {
   const insets = useSafeAreaInsets();
+  const { goBack } = useAdminNavigation();
   const [activeMainTab, setActiveMainTab] = useState('active');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -55,37 +64,67 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
       customerName: '',
       phone: '',
       address: '',
-      product: null as Product | null,
-      quantity: '1',
+      // Multi-select items: [{ productId, quantity }]
+      selectedItems: [] as { productId: string; quantity: string }[],
   });
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
   
-  // Fetch orders, delivery agents, and products
+  // Subscribe to orders in real-time; fetch delivery agents and products once
   useEffect(() => {
-    const fetchData = async () => {
+    setLoading(true);
+    const unsubscribe = orderService.subscribeAllOrders((all) => {
+      setOrders(all);
+      setLoading(false);
+    });
+
+    // Load non-realtime data
+    (async () => {
       try {
-        setLoading(true);
-        const [ordersData, agentsData, productsData] = await Promise.all([
-          orderService.getAllOrders(),
+        const [agentsData, productsData] = await Promise.all([
           deliveryAgentService.getAllDeliveryAgents(),
           getProducts()
         ]);
-        setOrders(ordersData);
         setDeliveryAgents(agentsData);
         setProducts(productsData);
       } catch (error) {
-        console.error('Error fetching data:', error);
-        Alert.alert('Error', 'Failed to load data');
-      } finally {
-        setLoading(false);
+        console.error('Error fetching metadata:', error);
       }
-    };
+    })();
 
-    fetchData();
+    return () => {
+      unsubscribe?.();
+    };
   }, []);
+
+  // Helpers for multi-select product picking in Create Order modal
+  const isProductSelected = (productId: string) =>
+    newOrderData.selectedItems.some(si => si.productId === productId);
+
+  const getQuantityFor = (productId: string) =>
+    newOrderData.selectedItems.find(si => si.productId === productId)?.quantity || '1';
+
+  const toggleSelectProduct = (productId: string) => {
+    setNewOrderData(prev => {
+      const exists = prev.selectedItems.some(si => si.productId === productId);
+      return exists
+        ? { ...prev, selectedItems: prev.selectedItems.filter(si => si.productId !== productId) }
+        : { ...prev, selectedItems: [...prev.selectedItems, { productId, quantity: '1' }] };
+    });
+  };
+
+  const updateItemQuantity = (productId: string, quantity: string) => {
+    // Allow only digits
+    const sanitized = quantity.replace(/[^0-9]/g, '');
+    setNewOrderData(prev => ({
+      ...prev,
+      selectedItems: prev.selectedItems.map(si =>
+        si.productId === productId ? { ...si, quantity: sanitized } : si
+      ),
+    }));
+  };
 
   // Mock data removed - using real Firebase data
 
@@ -209,7 +248,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                   <Text style={styles.orderId}>#{order.id}</Text>
                   <Text style={styles.orderDate}>{orderDate}</Text>
                 </View>
-                <Text style={styles.orderAmount}>₹{order.total}</Text>
+                <Text style={styles.orderAmount}>₹{formatAmount(order.total)}</Text>
               </View>
 
               <View style={styles.customerInfo}>
@@ -264,9 +303,6 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
   const handleAssignDeliveryAgent = async (orderId: string, agentId: string, agentName: string) => {
     try {
       await orderService.assignDeliveryAgent(orderId, agentId, agentName);
-      // Refresh orders
-      const updatedOrders = await orderService.getAllOrders();
-      setOrders(updatedOrders);
       setDetailModalVisible(false);
       // Find the order to check if it was a reassignment
       const order = orders.find(o => o.id === orderId);
@@ -294,9 +330,6 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
         )
       );
 
-      // Refresh orders
-      const updatedOrders = await orderService.getAllOrders();
-      setOrders(updatedOrders);
       setSelectedOrders([]);
       setDetailModalVisible(false);
       Alert.alert('Success', 'Orders assigned successfully');
@@ -308,39 +341,53 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
   
   const handleCreateOrder = async () => {
     try {
-      if (!newOrderData.product) {
-        Alert.alert('Error', 'Please select a product');
+      // Build items from selectedItems
+      if (!newOrderData.selectedItems.length) {
+        Alert.alert('Error', 'Please select at least one product');
         return;
       }
 
+      const items = newOrderData.selectedItems
+        .map(si => {
+          const prod = products.find(p => p.id === si.productId);
+          const qty = Math.max(0, parseInt(si.quantity || '0')) || 0;
+          if (!prod || qty <= 0) return null;
+          return {
+            productId: prod.id!,
+            userId: 'admin-created',
+            product: prod,
+            quantity: qty,
+          };
+        })
+        .filter(Boolean) as { productId: string; userId: string; product: Product; quantity: number; }[];
+
+      if (items.length === 0) {
+        Alert.alert('Error', 'Please provide quantity for selected products');
+        return;
+      }
+
+      const subtotal = items.reduce((sum, it) => sum + (it.product.price * it.quantity), 0);
+      const deliveryCharge = items.reduce((sum, it) => sum + (it.product.deliveryCharge || 0), 0);
+
       const orderData = {
-        userId: 'admin-created', // Special case for admin-created orders
+        userId: 'admin-created',
         customerName: newOrderData.customerName,
         customerPhone: newOrderData.phone,
         deliveryAddress: newOrderData.address,
-        items: [{
-          productId: newOrderData.product.id!,
-          userId: 'admin-created',
-          product: newOrderData.product,
-          quantity: parseInt(newOrderData.quantity),
-        }],
-        subtotal: newOrderData.product.price * parseInt(newOrderData.quantity),
-        deliveryCharge: newOrderData.product.deliveryCharge || 0,
-        gst: 0, // Add GST calculation if needed
+        items,
+        subtotal,
+        deliveryCharge,
+        gst: 0,
         discount: 0,
-        total: (newOrderData.product.price * parseInt(newOrderData.quantity)) + (newOrderData.product.deliveryCharge || 0),
+        total: subtotal + deliveryCharge,
         paymentMethod: 'cod' as const,
       };
 
       await orderService.createOrder(orderData);
       
-      // Refresh orders
-      const updatedOrders = await orderService.getAllOrders();
-      setOrders(updatedOrders);
-      
       setCreateModalVisible(false);
       // Reset form
-      setNewOrderData({ customerName: '', phone: '', address: '', product: null, quantity: '1' });
+      setNewOrderData({ customerName: '', phone: '', address: '', selectedItems: [] });
       Alert.alert('Success', 'Order created successfully');
     } catch (error) {
       console.error('Error creating order:', error);
@@ -354,13 +401,13 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
       `Are you sure you want to delete order #${orderId} for ${customerName}? This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
+        { 
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
               await orderService.deleteOrder(orderId);
-              // Remove the order from local state
+              // Local state will update via realtime listener; optional optimistic update:
               setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
               Alert.alert('Success', 'Order deleted successfully');
             } catch (error) {
@@ -409,7 +456,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
   );
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
       <View style={styles.container}>
         <StatusBar barStyle="light-content" />
         
@@ -418,7 +465,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
           style={[styles.header, { paddingTop: insets.top + 10 }]}
         >
           <View style={styles.headerLeft}>
-              <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerIcon}>
+              <TouchableOpacity onPress={goBack} style={styles.headerIcon}>
                   <ArrowLeft size={26} color={Colors.white} />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>Order Management</Text>
@@ -534,7 +581,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                                   <View style={{flex: 1, alignItems: 'flex-end'}}>
                                     {selectedOrder.items.map((item, index) => (
                                       <Text key={index} style={styles.modalValue}>
-                                        {item.product.name} (x{item.quantity}) - ₹{item.product.price * item.quantity}
+                                        {item.product.name} (x{item.quantity}) - ₹{formatAmount(item.product.price * item.quantity)}
                                       </Text>
                                     ))}
                                   </View>
@@ -549,12 +596,12 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                                     })}
                                   </Text>
                                 </View>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Subtotal:</Text><Text style={styles.modalValue}>₹{selectedOrder.subtotal}</Text></View>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Delivery Charge:</Text><Text style={styles.modalValue}>₹{selectedOrder.deliveryCharge}</Text></View>
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Subtotal:</Text><Text style={styles.modalValue}>₹{formatAmount(selectedOrder.subtotal)}</Text></View>
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Delivery Charge:</Text><Text style={styles.modalValue}>₹{formatAmount(selectedOrder.deliveryCharge)}</Text></View>
                                 {selectedOrder.discount > 0 && (
-                                  <View style={styles.modalRow}><Text style={styles.modalLabel}>Discount:</Text><Text style={styles.modalValue}>₹{selectedOrder.discount}</Text></View>
+                                  <View style={styles.modalRow}><Text style={styles.modalLabel}>Discount:</Text><Text style={styles.modalValue}>₹{formatAmount(selectedOrder.discount)}</Text></View>
                                 )}
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Total Amount:</Text><Text style={[styles.modalValue, {fontFamily: 'Inter_700Bold'}]}>₹{selectedOrder.total}</Text></View>
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Total Amount:</Text><Text style={[styles.modalValue, {fontFamily: 'Inter_700Bold'}]}>₹{formatAmount(selectedOrder.total)}</Text></View>
                             </View>
                             <View style={styles.modalSection}>
                                 <Text style={styles.modalSectionTitle}>Customer Info</Text>
@@ -706,13 +753,34 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                             <TextInput style={[styles.input, {height: 80}]} value={newOrderData.address} onChangeText={text => setNewOrderData({...newOrderData, address: text})} placeholder="Enter full address" multiline />
                         </View>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Select Product</Text>
-                            {products.map(product => (
-                                <TouchableOpacity key={product.id} style={[styles.productOption, newOrderData.product?.id === product.id && styles.productOptionSelected]} onPress={() => setNewOrderData({...newOrderData, product})}>
-                                    <Text style={[styles.productOptionText, newOrderData.product?.id === product.id && styles.productOptionTextSelected]}>{product.name}</Text>
-                                    <Text style={[styles.productOptionPrice, newOrderData.product?.id === product.id && styles.productOptionTextSelected]}>₹{product.price}</Text>
-                                </TouchableOpacity>
-                            ))}
+                            <Text style={styles.inputLabel}>Select Products</Text>
+                            {products.map(product => {
+                              const selected = isProductSelected(product.id!);
+                              const qty = getQuantityFor(product.id!);
+                              return (
+                                <View key={product.id}>
+                                  <TouchableOpacity 
+                                    style={[styles.productOption, selected && styles.productOptionSelected]} 
+                                    onPress={() => toggleSelectProduct(product.id!)}
+                                  >
+                                    <Text style={[styles.productOptionText, selected && styles.productOptionTextSelected]}>{product.name}</Text>
+                                    <Text style={[styles.productOptionPrice, selected && styles.productOptionTextSelected]}>₹{formatAmount(product.price)}</Text>
+                                  </TouchableOpacity>
+                                  {selected && (
+                                    <View style={styles.quantityRow}>
+                                      <Text style={styles.quantityLabel}>Qty</Text>
+                                      <TextInput
+                                        style={styles.quantityInput}
+                                        keyboardType="numeric"
+                                        value={qty}
+                                        onChangeText={(text) => updateItemQuantity(product.id!, text)}
+                                        placeholder="1"
+                                      />
+                                    </View>
+                                  )}
+                                </View>
+                              );
+                            })}
                         </View>
                     </View>
                 </ScrollView>
@@ -725,7 +793,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
         </View>
       </Modal>
       </View>
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
@@ -1022,6 +1090,31 @@ const styles = StyleSheet.create({
       fontSize: 16,
       fontFamily: 'Inter_500Medium',
       color: Colors.textSecondary,
+  },
+  quantityRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: -8,
+      marginBottom: 12,
+      paddingHorizontal: 8,
+  },
+  quantityLabel: {
+      fontSize: 14,
+      fontFamily: 'Inter_500Medium',
+      color: Colors.textSecondary,
+  },
+  quantityInput: {
+      minWidth: 70,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: Colors.border,
+      backgroundColor: Colors.background,
+      fontSize: 16,
+      color: Colors.text,
+      textAlign: 'center',
   },
   modalSection: {
       padding: 20,

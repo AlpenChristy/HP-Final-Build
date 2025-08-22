@@ -8,6 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Import services
 import { pickImage, takePhoto, uploadToCloudinary } from '../../core/services/cloudinaryService';
 import { Product, addProduct, deleteProduct, getProducts, updateProduct } from '../../core/services/productService';
+import { router } from 'expo-router';
+import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -27,6 +29,7 @@ const Colors = {
 
 export default function AdminProductsScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
+  const { goBack } = useAdminNavigation();
   const [modalVisible, setModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -107,17 +110,19 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
       'Select Image',
       'Choose how you want to select an image',
       [
-        { text: 'Camera', onPress: handleTakePhoto },
-        { text: 'Gallery', onPress: handlePickImage },
+        { text: 'Camera (Full)', onPress: () => handleTakePhoto(false) },
+        { text: 'Camera (Crop)', onPress: () => handleTakePhoto(true) },
+        { text: 'Gallery (Full)', onPress: () => handlePickImage(false) },
+        { text: 'Gallery (Crop)', onPress: () => handlePickImage(true) },
         { text: 'Cancel', style: 'cancel' },
       ]
     );
   };
 
-  const handlePickImage = async () => {
+  const handlePickImage = async (allowsEditing: boolean = false) => {
     try {
       setUploadingImage(true);
-      const imageAsset = await pickImage();
+      const imageAsset = await pickImage({ allowsEditing, aspect: allowsEditing ? [4, 3] : undefined });
       if (imageAsset) {
         const imageUrl = await uploadToCloudinary(imageAsset.uri);
         setSelectedImage(imageUrl);
@@ -130,10 +135,10 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
     }
   };
 
-  const handleTakePhoto = async () => {
+  const handleTakePhoto = async (allowsEditing: boolean = false) => {
     try {
       setUploadingImage(true);
-      const imageAsset = await takePhoto();
+      const imageAsset = await takePhoto({ allowsEditing, aspect: allowsEditing ? [4, 3] : undefined });
       if (imageAsset) {
         const imageUrl = await uploadToCloudinary(imageAsset.uri);
         setSelectedImage(imageUrl);
@@ -250,7 +255,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
         style={[styles.header, { paddingTop: insets.top + 10 }]}
       >
         <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerIcon}>
+            <TouchableOpacity onPress={goBack} style={styles.headerIcon}>
                 <ArrowLeft size={26} color={Colors.white} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Product Management</Text>

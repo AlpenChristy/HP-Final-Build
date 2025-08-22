@@ -1,6 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { ArrowLeft, Bell, ChevronRight, Edit, Lock, LogOut, Tag, Trash2, User, Users, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -843,6 +844,7 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
 
 export default function AdminProfileScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
+  const { goBack } = useAdminNavigation();
   const { userSession, logout, login } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
@@ -1263,7 +1265,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         style={[styles.header, { paddingTop: insets.top + 10 }]}
       >
         <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerIcon}>
+            <TouchableOpacity onPress={goBack} style={styles.headerIcon}>
                 <ArrowLeft size={26} color={Colors.white} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>My Profile</Text>

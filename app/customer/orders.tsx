@@ -116,30 +116,19 @@ export default function OrdersScreen() {
   const [orders, setOrders] = useState<ExtendedOrderData[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch orders
+  // Subscribe to orders (real-time)
   useEffect(() => {
-    const fetchOrders = async () => {
-      if (!userSession?.uid) return;
-      
-      try {
-        setLoading(true);
-        const userOrders = await orderService.getOrdersByUser(userSession.uid);
-        
-        // Add tracking steps to each order
-        const ordersWithTracking = userOrders.map(order => ({
-          ...order,
-          trackingSteps: getTrackingSteps(order)
-        }));
-        
-        setOrders(ordersWithTracking);
-      } catch (error) {
-        console.error('Error fetching orders:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchOrders();
+    if (!userSession?.uid) return;
+    setLoading(true);
+    const unsubscribe = orderService.subscribeOrdersByUser(userSession.uid, (userOrders) => {
+      const ordersWithTracking = userOrders.map(order => ({
+        ...order,
+        trackingSteps: getTrackingSteps(order)
+      }));
+      setOrders(ordersWithTracking);
+      setLoading(false);
+    });
+    return () => unsubscribe?.();
   }, [userSession?.uid]);
 
   // Set initial tab based on URL parameter

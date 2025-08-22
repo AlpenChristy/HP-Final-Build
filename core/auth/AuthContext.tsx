@@ -41,7 +41,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (hasValidSession) {
           const existingSession = await SessionManager.getSession();
           if (existingSession) {
-            console.log('Found valid existing session:', existingSession.email);
+            console.log('Found valid existing session:', existingSession.email || existingSession.phoneNumber || existingSession.uid);
             setUserSession(existingSession);
           }
         }
@@ -76,7 +76,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             
             const newSession: UserSession = {
               uid: firebaseUser.uid,
-              email: firebaseUser.email || userData.email,
+              email: firebaseUser.email || userData.email || undefined,
               displayName: firebaseUser.displayName || userData.displayName,
               phoneNumber: firebaseUser.phoneNumber || userData.phoneNumber,
               role: userData.role || 'customer',
@@ -87,14 +87,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             
             await SessionManager.saveSession(newSession);
             setUserSession(newSession);
-            console.log('Created session from Firebase auth for:', newSession.email, 'Role:', newSession.role);
+            console.log('Created session from Firebase auth for:', newSession.email || newSession.phoneNumber || newSession.uid, 'Role:', newSession.role);
           }
         } catch (error) {
           console.error('Error creating session from Firebase user:', error);
         }
-      } else if (!firebaseUser && userSession) {
-        // Firebase user is null but we have a session, clear the session
-        handleLogout();
+      } else if (!firebaseUser) {
+        // No Firebase user; keep any existing custom session (e.g., phone-based)
+        setUser(null);
       }
       
       setIsLoading(false);
@@ -107,7 +107,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await SessionManager.saveSession(session);
       setUserSession(session);
-      console.log('Session saved successfully for:', session.email);
+      console.log('Session saved successfully for:', session.email || session.phoneNumber || session.uid);
     } catch (error) {
       console.error('Error saving session:', error);
       throw error;
@@ -137,7 +137,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     userSession,
     isLoading,
-    isAuthenticated: !!(user && userSession),
+    isAuthenticated: !!userSession,
     login: handleLogin,
     logout: handleLogout,
   };

@@ -6,6 +6,8 @@ import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Tex
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { DeliveryAgent, deliveryAgentService } from '../../core/services/deliveryAgentService';
+import { router } from 'expo-router';
+import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -27,6 +29,7 @@ const Colors = {
 export default function AdminDeliveryAgentScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
   const { userSession } = useAuth();
+  const { goBack } = useAdminNavigation();
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [agentToEdit, setAgentToEdit] = useState<DeliveryAgent | null>(null);
@@ -196,7 +199,7 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
         style={[styles.header, { paddingTop: insets.top + 10 }]}
       >
         <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerIcon}>
+            <TouchableOpacity onPress={goBack} style={styles.headerIcon}>
                 <ArrowLeft size={26} color={Colors.white} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Delivery Agents</Text>

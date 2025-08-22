@@ -4,7 +4,7 @@ const SESSION_KEY = 'user_session';
 
 export interface UserSession {
   uid: string;
-  email: string;
+  email?: string;
   displayName?: string;
   phoneNumber?: string;
   role?: string;
