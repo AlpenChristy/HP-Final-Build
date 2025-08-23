@@ -2,7 +2,7 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, us
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { updateEmail } from 'firebase/auth';
-import { ArrowLeft, ChevronRight, Lock, LogOut, User, X } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, LogOut, User, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -53,28 +53,7 @@ const EditProfileContent = ({ user, onSave, isSaving }: { user: any, onSave: (na
     );
 };
 
-const ChangePasswordContent = ({ onForgotPassword }: { onForgotPassword: () => void }) => (
-    <View>
-        <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Current Password</Text>
-            <TextInput style={styles.input} secureTextEntry />
-        </View>
-        <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>New Password</Text>
-            <TextInput style={styles.input} secureTextEntry />
-        </View>
-        <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Confirm New Password</Text>
-            <TextInput style={styles.input} secureTextEntry />
-        </View>
-        <TouchableOpacity style={styles.forgotPasswordButton} onPress={onForgotPassword}>
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Update Password</Text>
-        </TouchableOpacity>
-    </View>
-);
+
 
 const ForgotPasswordContent = () => (
     <View>
@@ -143,7 +122,6 @@ export default function DeliveryAgentProfileScreen() {
 
   const menuItems = [
     { id: '1', title: 'Edit Profile', icon: User, action: () => openModal('editProfile') },
-    { id: '2', title: 'Change Password', icon: Lock, action: () => openModal('changePassword') },
   ];
 
   if (!fontsLoaded) {
@@ -153,7 +131,6 @@ export default function DeliveryAgentProfileScreen() {
   const renderModalContent = () => {
       switch(modalView) {
           case 'editProfile': return <EditProfileContent user={profileData || userSession} onSave={handleSaveProfile} isSaving={isSavingProfile} />;
-          case 'changePassword': return <ChangePasswordContent onForgotPassword={() => setModalView('forgotPassword')} />;
           case 'forgotPassword': return <ForgotPasswordContent />;
           default: return null;
       }

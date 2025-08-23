@@ -70,6 +70,8 @@ const ChangePasswordContent = () => (
     </View>
 );
 
+
+
 const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSubAdmin, onChangePassword }: { 
     setModalView: any, 
     setEditingAdmin: any,
@@ -1026,6 +1028,8 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
     );
   };
 
+
+
   const loadPromocodes = async () => {
     if (!userSession?.uid) return;
     
@@ -1240,7 +1244,10 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
 
   const menuItems = [
     { id: '1', title: 'Edit Profile', icon: User, action: () => openModal('editProfile') },
-    { id: '2', title: 'Change Password', icon: Lock, action: () => openModal('changePassword') },
+    // Only show change password for full admins, not sub-admins
+    ...(userSession?.role === 'admin' ? [
+      { id: '2', title: 'Change Password', icon: Lock, action: () => openModal('changePassword') }
+    ] : []),
     // Only show sub-admin management for full admins, not sub-admins
     ...(userSession?.role === 'admin' ? [
       { id: '3', title: 'Sub-admin Management', icon: Users, action: () => openModal('subAdmin') },
