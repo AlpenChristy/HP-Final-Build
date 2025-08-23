@@ -1,17 +1,17 @@
 // File: core/auth/StableAdminLayout.tsx
-import React, { useState, createContext, useContext } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BarChart2, ClipboardList, Package, Truck, User } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { BarChart2, ClipboardList, Package, Truck, User } from 'lucide-react-native';
+import React, { createContext, useContext, useState } from 'react';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from './AuthContext';
 import { hasPermission } from './rbac';
 
 // Import admin screens directly
 import AdminDashboard from '../../app/admin/admindashboard';
+import AdminDeliveryAgentScreen from '../../app/admin/admindeliverymanagement';
 import AdminOrdersScreen from '../../app/admin/adminordersmanagement';
 import AdminProductsScreen from '../../app/admin/adminproductmanagement';
-import AdminDeliveryAgentScreen from '../../app/admin/admindeliverymanagement';
 import AdminProfileScreen from '../../app/admin/adminprofile';
 
 // Navigation context for handling back actions
@@ -46,9 +46,9 @@ export const StableAdminLayout: React.FC = () => {
   // Determine available tabs based on permissions
   const availableTabs: { key: AdminTab; title: string; icon: any }[] = [];
   
-  if (isAdmin) {
-    availableTabs.push({ key: 'dashboard', title: 'Dashboard', icon: BarChart2 });
-  }
+  // Dashboard is available for both admin and sub-admin (as per RBAC)
+  availableTabs.push({ key: 'dashboard', title: 'Dashboard', icon: BarChart2 });
+  
   if (hasPermission(userSession, 'orders')) {
     availableTabs.push({ key: 'orders', title: 'Orders', icon: ClipboardList });
   }

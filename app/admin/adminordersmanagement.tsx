@@ -584,6 +584,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
         animationType="slide"
         transparent={true}
         visible={detailModalVisible}
+        statusBarTranslucent={true}
         onRequestClose={() => setDetailModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
@@ -794,6 +795,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
         animationType="slide"
         transparent={true}
         visible={createModalVisible}
+        statusBarTranslucent={true}
         onRequestClose={() => setCreateModalVisible(false)}
       >
         <View style={styles.modalOverlay}>

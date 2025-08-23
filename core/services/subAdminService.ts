@@ -1,7 +1,7 @@
 // File: core/services/subAdminService.ts
 import { initializeApp } from 'firebase/app';
-import { createUserWithEmailAndPassword, deleteUser, getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { collection, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, deleteUser, getAuth, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { FIREBASE_DB, firebaseConfig } from '../firebase/firebase';
 import { userService } from './userService';
 
@@ -19,7 +19,7 @@ export interface SubAdminPermissions {
 // Sub-admin data interface
 export interface SubAdminData {
   uid: string;
-  email: string;
+  email?: string;
   displayName: string;
   phoneNumber?: string;
   role: 'sub-admin';
@@ -36,7 +36,7 @@ export const subAdminService = {
   async createSubAdmin(
     adminUid: string,
     subAdminData: {
-      email: string;
+      email?: string;
       password: string;
       displayName: string;
       phoneNumber?: string;
@@ -46,21 +46,63 @@ export const subAdminService = {
     try {
       const timestamp = Date.now();
 
+      // Validate that at least one contact method is provided
+      if (!subAdminData.email && !subAdminData.phoneNumber) {
+        throw new Error('Either email or phone number is required');
+      }
+
+      // Validate unique email if provided
+      if (subAdminData.email) {
+        const existingEmailUser = await this.checkEmailExists(subAdminData.email);
+        if (existingEmailUser) {
+          throw new Error('Email address is already registered');
+        }
+      }
+
+      // Validate unique phone if provided
+      if (subAdminData.phoneNumber) {
+        const existingPhoneUser = await this.checkPhoneExists(subAdminData.phoneNumber);
+        if (existingPhoneUser) {
+          throw new Error('Phone number is already registered');
+        }
+      }
+
       // 1) Create Firebase Auth user via secondary instance (prevents admin sign-out)
-      const { user } = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        subAdminData.email,
-        subAdminData.password
-      );
+      let user;
+      if (subAdminData.email) {
+        const { user: firebaseUser } = await createUserWithEmailAndPassword(
+          secondaryAuth,
+          subAdminData.email,
+          subAdminData.password
+        );
+        user = firebaseUser;
+        
+        // Update Firebase Auth profile with displayName
+        await updateProfile(firebaseUser, {
+          displayName: subAdminData.displayName
+        });
+      } else {
+        // If no email, we need to create a custom UID for phone-only sub-admins
+        const customUid = `phone_subadmin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        user = { uid: customUid } as any;
+      }
 
       // 2) Create user doc in unified users collection
-      await userService.createUser({
+      const userData: any = {
         uid: user.uid,
-        email: subAdminData.email,
         displayName: subAdminData.displayName,
-        phoneNumber: subAdminData.phoneNumber,
         role: 'sub-admin',
-      });
+      };
+      
+      // Only add email and phone if they are provided (not undefined)
+      if (subAdminData.email) {
+        userData.email = subAdminData.email;
+      }
+      if (subAdminData.phoneNumber) {
+        userData.phoneNumber = subAdminData.phoneNumber;
+      }
+      
+      await userService.createUser(userData);
 
       // 3) Add sub-admin specific fields on the same users doc
       const userRef = doc(FIREBASE_DB, 'users', user.uid);
@@ -74,8 +116,10 @@ export const subAdminService = {
         updatedAt: timestamp,
       });
 
-      // 4) Sign out secondary auth to clean up
-      await signOut(secondaryAuth);
+      // 4) Sign out secondary auth to clean up (only if we created a Firebase Auth user)
+      if (subAdminData.email) {
+        await signOut(secondaryAuth);
+      }
 
       return user.uid;
     } catch (error) {
@@ -175,11 +219,49 @@ export const subAdminService = {
     profileData: {
       displayName?: string;
       phoneNumber?: string;
+      email?: string;
     }
   ): Promise<void> {
     try {
-      // Update in users collection only
-      await userService.updateUser(uid, { ...profileData });
+      // Validate unique phone if being updated and not empty
+      if (profileData.phoneNumber !== undefined && profileData.phoneNumber.trim() !== '') {
+        const existingPhoneUser = await this.checkPhoneExistsExcludingUser(uid, profileData.phoneNumber);
+        if (existingPhoneUser) {
+          throw new Error('Phone number is already registered by another user');
+        }
+      }
+
+      // Validate unique email if being updated
+      if (profileData.email !== undefined && profileData.email.trim() !== '') {
+        const existingEmailUser = await this.checkEmailExistsExcludingUser(uid, profileData.email);
+        if (existingEmailUser) {
+          throw new Error('Email address is already registered by another user');
+        }
+      }
+
+      // Update in users collection with proper field handling
+      const userRef = doc(FIREBASE_DB, 'users', uid);
+      const payload: any = { updatedAt: Date.now() };
+      
+      if (profileData.displayName !== undefined) payload.displayName = profileData.displayName;
+      if (profileData.phoneNumber !== undefined) {
+        // Handle phone number - if empty string, remove the field from Firestore
+        if (profileData.phoneNumber.trim() === '') {
+          payload.phoneNumber = deleteField(); // This will remove the field from Firestore
+        } else {
+          payload.phoneNumber = profileData.phoneNumber.trim();
+        }
+      }
+      if (profileData.email !== undefined) {
+        // Handle email - if empty string, remove the field from Firestore
+        if (profileData.email.trim() === '') {
+          payload.email = deleteField(); // This will remove the field from Firestore
+        } else {
+          payload.email = profileData.email.trim();
+        }
+      }
+      
+      await updateDoc(userRef, payload);
     } catch (error) {
       console.error('Error updating sub-admin profile:', error);
       throw error;
@@ -214,7 +296,6 @@ export const subAdminService = {
         // Update password in Firebase Auth
         if (secondaryAuth.currentUser) {
           await (secondaryAuth.currentUser as any).updatePassword(newPassword);
-          console.log('Firebase Auth password updated successfully');
         }
       } catch (authError) {
         console.warn('Warning: Failed to update Firebase Auth password:', authError);
@@ -230,7 +311,6 @@ export const subAdminService = {
         updatedAt: timestamp,
       });
 
-      console.log(`Password changed for sub-admin ${uid} at ${timestamp}`);
     } catch (error) {
       console.error('Error changing sub-admin password:', error);
       throw new Error('Failed to change sub-admin password');
@@ -245,6 +325,74 @@ export const subAdminService = {
     } catch (error) {
       console.error('Error deactivating sub-admin:', error);
       throw error;
+    }
+  },
+
+  // Check if email already exists in the database
+  async checkEmailExists(email: string): Promise<boolean> {
+    try {
+      const usersRef = collection(FIREBASE_DB, 'users');
+      const q = query(usersRef, where('email', '==', email));
+      const snapshot = await getDocs(q);
+      return !snapshot.empty;
+    } catch (error) {
+      console.error('Error checking email existence:', error);
+      throw new Error('Failed to validate email uniqueness');
+    }
+  },
+
+  // Check if phone number already exists in the database
+  async checkPhoneExists(phone: string): Promise<boolean> {
+    try {
+      const usersRef = collection(FIREBASE_DB, 'users');
+      const q = query(usersRef, where('phoneNumber', '==', phone));
+      const snapshot = await getDocs(q);
+      return !snapshot.empty;
+    } catch (error) {
+      console.error('Error checking phone existence:', error);
+      throw new Error('Failed to validate phone uniqueness');
+    }
+  },
+
+  // Check if phone number exists excluding a specific user (for updates)
+  async checkPhoneExistsExcludingUser(excludeUid: string, phone: string): Promise<boolean> {
+    try {
+      // If phone is empty, no conflict
+      if (!phone || phone.trim() === '') {
+        return false;
+      }
+      
+      const usersRef = collection(FIREBASE_DB, 'users');
+      const q = query(usersRef, where('phoneNumber', '==', phone));
+      const snapshot = await getDocs(q);
+      
+      // Check if any user other than the excluded one has this phone number
+      const conflictingUser = snapshot.docs.find(doc => doc.id !== excludeUid);
+      return !!conflictingUser;
+    } catch (error) {
+      console.error('Error checking phone existence excluding user:', error);
+      throw new Error('Failed to validate phone uniqueness');
+    }
+  },
+
+  // Check if email exists excluding a specific user (for updates)
+  async checkEmailExistsExcludingUser(excludeUid: string, email: string): Promise<boolean> {
+    try {
+      // If email is empty, no conflict
+      if (!email || email.trim() === '') {
+        return false;
+      }
+      
+      const usersRef = collection(FIREBASE_DB, 'users');
+      const q = query(usersRef, where('email', '==', email));
+      const snapshot = await getDocs(q);
+      
+      // Check if any user other than the excluded one has this email
+      const conflictingUser = snapshot.docs.find(doc => doc.id !== excludeUid);
+      return !!conflictingUser;
+    } catch (error) {
+      console.error('Error checking email existence excluding user:', error);
+      throw new Error('Failed to validate email uniqueness');
     }
   },
 

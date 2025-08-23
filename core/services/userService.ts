@@ -24,8 +24,16 @@ export const userService = {
     const timestamp = Date.now();
     const userRef = doc(FIREBASE_DB, 'users', userData.uid);
     
+    // Filter out undefined values to prevent Firestore errors
+    const cleanUserData: any = {};
+    Object.keys(userData).forEach(key => {
+      if (userData[key as keyof UserData] !== undefined) {
+        cleanUserData[key] = userData[key as keyof UserData];
+      }
+    });
+    
     await setDoc(userRef, {
-      ...userData,
+      ...cleanUserData,
       role: userData.role || 'customer', // Default role
       createdAt: timestamp,
       updatedAt: timestamp,

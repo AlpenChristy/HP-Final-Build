@@ -2,7 +2,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { createUserWithEmailAndPassword, deleteUser, getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { collection, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { FIREBASE_DB, firebaseConfig } from '../firebase/firebase';
 import { userService } from './userService';
 
@@ -15,8 +15,8 @@ export interface DeliveryAgent {
   id?: string;
   uid: string;
   name: string;
-  email: string;
-  phone: string;
+  email?: string;
+  phone?: string;
   role: 'delivery';
   isActive: boolean;
   deliveriesThisWeek?: number;
@@ -31,28 +31,66 @@ export const deliveryAgentService = {
   // Create a new delivery agent in Firebase Auth + Firestore without logging out admin
   async createDeliveryAgent(agentData: {
     name: string;
-    email: string;
-    phone: string;
+    email?: string;
+    phone?: string;
     password: string;
   }): Promise<DeliveryAgent> {
     try {
       const timestamp = Date.now();
 
-      // 1. Create account in Firebase Auth using secondary instance
-      const { user } = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        agentData.email,
-        agentData.password
-      );
+      // Validate that at least one contact method is provided
+      if (!agentData.email && !agentData.phone) {
+        throw new Error('Either email or phone number is required');
+      }
+
+      // Validate unique email if provided
+      if (agentData.email) {
+        const existingEmailUser = await this.checkEmailExists(agentData.email);
+        if (existingEmailUser) {
+          throw new Error('Email address is already registered');
+        }
+      }
+
+      // Validate unique phone if provided
+      if (agentData.phone) {
+        const existingPhoneUser = await this.checkPhoneExists(agentData.phone);
+        if (existingPhoneUser) {
+          throw new Error('Phone number is already registered');
+        }
+      }
+
+      // If email is provided, create Firebase Auth account
+      let user;
+      if (agentData.email) {
+        const { user: firebaseUser } = await createUserWithEmailAndPassword(
+          secondaryAuth,
+          agentData.email,
+          agentData.password
+        );
+        user = firebaseUser;
+      } else {
+        // If no email, we need to create a custom UID for phone-only agents
+        // This is a simplified approach - in production you might want a more robust solution
+        const customUid = `phone_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        user = { uid: customUid } as any;
+      }
 
       // 2. Create base user document in unified users collection
-      await userService.createUser({
+      const userData: any = {
         uid: user.uid,
-        email: agentData.email,
         displayName: agentData.name,
-        phoneNumber: agentData.phone,
         role: 'delivery',
-      });
+      };
+      
+      // Only add email and phone if they are provided (not undefined)
+      if (agentData.email) {
+        userData.email = agentData.email;
+      }
+      if (agentData.phone) {
+        userData.phoneNumber = agentData.phone;
+      }
+      
+      await userService.createUser(userData);
 
       // 3. Add delivery-specific fields on the same users doc
       const userRef = doc(FIREBASE_DB, 'users', user.uid);
@@ -67,8 +105,10 @@ export const deliveryAgentService = {
         updatedAt: timestamp,
       });
 
-      // 5. Sign out secondary auth to clean up
-      await signOut(secondaryAuth);
+      // 5. Sign out secondary auth to clean up (only if we created a Firebase Auth user)
+      if (agentData.email) {
+        await signOut(secondaryAuth);
+      }
 
       // 4. Build return object from users doc
       const createdSnap = await getDoc(userRef);
@@ -77,8 +117,8 @@ export const deliveryAgentService = {
         id: user.uid,
         uid: user.uid,
         name: data.displayName || agentData.name,
-        email: data.email || agentData.email,
-        phone: data.phoneNumber || agentData.phone,
+        email: data.email || agentData.email || '',
+        phone: data.phoneNumber || agentData.phone || '',
         role: 'delivery',
         isActive: data.isActive ?? true,
         deliveriesThisWeek: data.deliveriesThisWeek ?? 0,
@@ -107,47 +147,78 @@ export const deliveryAgentService = {
       const q = query(usersRef, where('role', '==', 'delivery'));
       const snapshot = await getDocs(q);
 
-      return snapshot.docs.map(docSnap => {
-        const d = docSnap.data() as any;
-        const agent: DeliveryAgent = {
-          id: docSnap.id,
-          uid: docSnap.id,
-          name: d.displayName || '',
-          email: d.email || '',
-          phone: d.phoneNumber || '',
-          role: 'delivery',
-          isActive: d.isActive ?? true,
-          deliveriesThisWeek: d.deliveriesThisWeek ?? 0,
-          remainingToday: d.remainingToday ?? 0,
-          totalAllotted: d.totalAllotted ?? 0,
-          createdAt: d.createdAt || 0,
-          updatedAt: d.updatedAt || 0,
-        };
-        return agent;
-      });
+             return snapshot.docs.map(docSnap => {
+         const d = docSnap.data() as any;
+         const agent: DeliveryAgent = {
+           id: docSnap.id,
+           uid: docSnap.id,
+           name: d.displayName || '',
+           email: d.email || undefined,
+           phone: d.phoneNumber || undefined,
+           role: 'delivery',
+           isActive: d.isActive ?? true,
+           deliveriesThisWeek: d.deliveriesThisWeek ?? 0,
+           remainingToday: d.remainingToday ?? 0,
+           totalAllotted: d.totalAllotted ?? 0,
+           createdAt: d.createdAt || 0,
+           updatedAt: d.updatedAt || 0,
+         };
+         return agent;
+       });
     } catch (error) {
       console.error('Error getting delivery agents:', error);
       throw new Error('Failed to fetch delivery agents');
     }
   },
 
-  // Update delivery agent
-  async updateDeliveryAgent(uid: string, updateData: Partial<DeliveryAgent>): Promise<void> {
-    try {
-      const userRef = doc(FIREBASE_DB, 'users', uid);
-      const payload: any = { updatedAt: Date.now() };
-      if (updateData.name !== undefined) payload.displayName = updateData.name;
-      if (updateData.phone !== undefined) payload.phoneNumber = updateData.phone;
-      if (updateData.isActive !== undefined) payload.isActive = updateData.isActive;
-      if (updateData.deliveriesThisWeek !== undefined) payload.deliveriesThisWeek = updateData.deliveriesThisWeek;
-      if (updateData.remainingToday !== undefined) payload.remainingToday = updateData.remainingToday;
-      if (updateData.totalAllotted !== undefined) payload.totalAllotted = updateData.totalAllotted;
-      await updateDoc(userRef, payload);
-    } catch (error) {
-      console.error('Error updating delivery agent:', error);
-      throw new Error('Failed to update delivery agent');
-    }
-  },
+           // Update delivery agent
+    async updateDeliveryAgent(uid: string, updateData: Partial<DeliveryAgent>): Promise<void> {
+      try {
+        // Validate unique phone if being updated and not empty
+        if (updateData.phone !== undefined && updateData.phone.trim() !== '') {
+          const existingPhoneUser = await this.checkPhoneExistsExcludingUser(uid, updateData.phone);
+          if (existingPhoneUser) {
+            throw new Error('Phone number is already registered by another user');
+          }
+        }
+
+        // Validate unique email if being updated
+        if (updateData.email !== undefined && updateData.email.trim() !== '') {
+          const existingEmailUser = await this.checkEmailExistsExcludingUser(uid, updateData.email);
+          if (existingEmailUser) {
+            throw new Error('Email address is already registered by another user');
+          }
+        }
+
+        const userRef = doc(FIREBASE_DB, 'users', uid);
+        const payload: any = { updatedAt: Date.now() };
+        if (updateData.name !== undefined) payload.displayName = updateData.name;
+        if (updateData.phone !== undefined) {
+          // Handle phone number - if empty string, remove the field from Firestore
+          if (updateData.phone.trim() === '') {
+            payload.phoneNumber = deleteField(); // This will remove the field from Firestore
+          } else {
+            payload.phoneNumber = updateData.phone.trim();
+          }
+        }
+        if (updateData.email !== undefined) {
+          // Handle email - if empty string, remove the field from Firestore
+          if (updateData.email.trim() === '') {
+            payload.email = deleteField(); // This will remove the field from Firestore
+          } else {
+            payload.email = updateData.email.trim();
+          }
+        }
+        if (updateData.isActive !== undefined) payload.isActive = updateData.isActive;
+        if (updateData.deliveriesThisWeek !== undefined) payload.deliveriesThisWeek = updateData.deliveriesThisWeek;
+        if (updateData.remainingToday !== undefined) payload.remainingToday = updateData.remainingToday;
+        if (updateData.totalAllotted !== undefined) payload.totalAllotted = updateData.totalAllotted;
+        await updateDoc(userRef, payload);
+     } catch (error) {
+       console.error('Error updating delivery agent:', error);
+       throw new Error('Failed to update delivery agent');
+     }
+   },
 
   // Change delivery agent password (this will force logout)
   async changeDeliveryAgentPassword(uid: string, newPassword: string): Promise<void> {
@@ -186,7 +257,6 @@ export const deliveryAgentService = {
         }
       }
 
-      console.log(`Password changed for delivery agent ${uid} at ${timestamp}`);
     } catch (error) {
       console.error('Error changing delivery agent password:', error);
       throw new Error('Failed to change delivery agent password');
@@ -237,18 +307,86 @@ export const deliveryAgentService = {
     }
   },
 
-  // Update delivery statistics
-  async updateDeliveryStats(uid: string, stats: {
-    deliveriesThisWeek?: number;
-    remainingToday?: number;
-    totalAllotted?: number;
-  }): Promise<void> {
-    try {
-      const userRef = doc(FIREBASE_DB, 'users', uid);
-      await updateDoc(userRef, { ...stats, updatedAt: Date.now() });
-    } catch (error) {
-      console.error('Error updating delivery stats:', error);
-      throw new Error('Failed to update delivery statistics');
-    }
-  },
-};
+     // Update delivery statistics
+   async updateDeliveryStats(uid: string, stats: {
+     deliveriesThisWeek?: number;
+     remainingToday?: number;
+     totalAllotted?: number;
+   }): Promise<void> {
+     try {
+       const userRef = doc(FIREBASE_DB, 'users', uid);
+       await updateDoc(userRef, { ...stats, updatedAt: Date.now() });
+     } catch (error) {
+       console.error('Error updating delivery stats:', error);
+       throw new Error('Failed to update delivery statistics');
+     }
+   },
+
+   // Check if email already exists in the database
+   async checkEmailExists(email: string): Promise<boolean> {
+     try {
+       const usersRef = collection(FIREBASE_DB, 'users');
+       const q = query(usersRef, where('email', '==', email));
+       const snapshot = await getDocs(q);
+       return !snapshot.empty;
+     } catch (error) {
+       console.error('Error checking email existence:', error);
+       throw new Error('Failed to validate email uniqueness');
+     }
+   },
+
+   // Check if phone number already exists in the database
+   async checkPhoneExists(phone: string): Promise<boolean> {
+     try {
+       const usersRef = collection(FIREBASE_DB, 'users');
+       const q = query(usersRef, where('phoneNumber', '==', phone));
+       const snapshot = await getDocs(q);
+       return !snapshot.empty;
+     } catch (error) {
+       console.error('Error checking phone existence:', error);
+       throw new Error('Failed to validate phone uniqueness');
+     }
+   },
+
+       // Check if phone number exists excluding a specific user (for updates)
+    async checkPhoneExistsExcludingUser(excludeUid: string, phone: string): Promise<boolean> {
+      try {
+        // If phone is empty, no conflict
+        if (!phone || phone.trim() === '') {
+          return false;
+        }
+        
+        const usersRef = collection(FIREBASE_DB, 'users');
+        const q = query(usersRef, where('phoneNumber', '==', phone));
+        const snapshot = await getDocs(q);
+        
+        // Check if any user other than the excluded one has this phone number
+        const conflictingUser = snapshot.docs.find(doc => doc.id !== excludeUid);
+        return !!conflictingUser;
+      } catch (error) {
+        console.error('Error checking phone existence excluding user:', error);
+        throw new Error('Failed to validate phone uniqueness');
+      }
+    },
+
+    // Check if email exists excluding a specific user (for updates)
+    async checkEmailExistsExcludingUser(excludeUid: string, email: string): Promise<boolean> {
+      try {
+        // If email is empty, no conflict
+        if (!email || email.trim() === '') {
+          return false;
+        }
+        
+        const usersRef = collection(FIREBASE_DB, 'users');
+        const q = query(usersRef, where('email', '==', email));
+        const snapshot = await getDocs(q);
+        
+        // Check if any user other than the excluded one has this email
+        const conflictingUser = snapshot.docs.find(doc => doc.id !== excludeUid);
+        return !!conflictingUser;
+      } catch (error) {
+        console.error('Error checking email existence excluding user:', error);
+        throw new Error('Failed to validate email uniqueness');
+      }
+    },
+ };

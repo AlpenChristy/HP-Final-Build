@@ -54,16 +54,13 @@ export default function OrderPlacedScreen() {
       try {
         // Check if order ID is passed as parameter
         if (params.orderId) {
-          console.log('Loading order with ID:', params.orderId);
           // Try to get order by custom ID first, then fallback to Firebase ID
           let order = await orderService.getOrderByCustomId(params.orderId as string);
           if (!order) {
-            console.log('Order not found by custom ID, trying Firebase ID');
             // Fallback to Firebase document ID for backward compatibility
             order = await orderService.getOrderById(params.orderId as string);
           }
           if (order) {
-            console.log('Order found:', order);
             setOrderData({
               id: order.orderId || order.id,
               total: order.total,

@@ -12,6 +12,7 @@ import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
+import { createToastHelpers } from '../../core/utils/toastUtils';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -113,6 +114,7 @@ const PersonalInfoContent = ({ user, onSave, isSaving }: { user: any, onSave: (n
 
 const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
     const { address: sharedAddress, updateAddress } = useAddress();
+    const toast = createToastHelpers();
     const [isEditing, setIsEditing] = useState(false);
     const [localAddress, setLocalAddress] = useState(sharedAddress || '');
     const [isSaving, setIsSaving] = useState(false);
@@ -124,7 +126,7 @@ const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
 
     const handleSaveAddress = async () => {
         if (!localAddress.trim()) {
-            Alert.alert('Error', 'Please enter a valid address.');
+            toast.showError('Validation Error', 'Please enter a valid address.');
             return;
         }
 
@@ -133,10 +135,10 @@ const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
             // Update address using shared context (automatically syncs with checkout)
             await updateAddress(localAddress.trim());
             setIsEditing(false);
-            Alert.alert('Success', 'Address updated successfully!');
+            toast.showAddressUpdatedSuccess();
         } catch (error) {
             console.error('Error saving address:', error);
-            Alert.alert('Error', 'Failed to save address. Please try again.');
+            toast.showSaveError('address');
         } finally {
             setIsSaving(false);
         }
@@ -156,10 +158,10 @@ const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
                             // Update address using shared context (automatically syncs with checkout)
                             await updateAddress('');
                             setLocalAddress('');
-                            Alert.alert('Success', 'Address deleted successfully!');
+                            toast.showAddressDeletedSuccess();
                         } catch (error) {
                             console.error('Error deleting address:', error);
-                            Alert.alert('Error', 'Failed to delete address. Please try again.');
+                            toast.showDeleteError('address');
                         }
                     }
                 }
@@ -421,6 +423,7 @@ export default function ProfileScreen() {
   const { userSession, logout, login } = useAuth();
   const { address, updateAddress, isLoading: addressLoading } = useAddress();
   const { consumerNumber, updateConsumerNumber, isLoading: consumerNumberLoading } = useConsumerNumber();
+  const toast = createToastHelpers();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -518,7 +521,7 @@ export default function ProfileScreen() {
               router.replace('/');
             } catch (error) {
               console.error('Logout error:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
+              toast.showGenericError('Failed to logout. Please try again.');
             }
           },
         },
@@ -565,12 +568,12 @@ export default function ProfileScreen() {
 
     // Simple validations
     if (!name) {
-      Alert.alert('Validation', 'Name cannot be empty.');
+      toast.showValidationError('name');
       return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      Alert.alert('Validation', 'Please enter a valid email address.');
+      toast.showValidationError('email address');
       return;
     }
 
@@ -607,10 +610,10 @@ export default function ProfileScreen() {
       refreshUserData();
 
       setModalVisible(false);
-      Alert.alert('Success', 'Profile updated successfully.');
+      toast.showProfileUpdatedSuccess();
     } catch (error) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      toast.showSaveError('profile');
     } finally {
       setIsSavingPersonal(false);
     }

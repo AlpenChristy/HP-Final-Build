@@ -116,7 +116,6 @@ export const orderService = {
       // Update stock levels for all products in the order (can go negative for backorders)
       await this.updateStockLevels(orderData.items);
       
-      console.log('Order created successfully with ID:', orderId);
       return orderId; // Return custom order ID instead of Firebase ID
     } catch (error) {
       console.error('Error creating order:', error);
@@ -141,7 +140,6 @@ export const orderService = {
             inStock: true
           });
           
-          console.log(`Updated stock for ${product.name}: ${currentQuantity} -> ${newQuantity}`);
         }
       }
     } catch (error) {
@@ -315,7 +313,6 @@ export const orderService = {
             inStock: true // Make sure it's visible to customers again
           });
           
-          console.log(`Restored stock for ${product.name}: ${currentQuantity} -> ${newQuantity}`);
         }
       }
     } catch (error) {
@@ -509,7 +506,6 @@ export const orderService = {
       }
       
       await deleteDoc(orderRef);
-      console.log('Order deleted successfully:', orderId);
     } catch (error) {
       console.error('Error deleting order:', error);
       throw error;
@@ -540,7 +536,6 @@ export const orderService = {
         updatedAt: Date.now(),
       });
       
-      console.log('Delivery notes deleted successfully for order:', orderId);
     } catch (error) {
       console.error('Error deleting delivery notes:', error);
       throw error;

@@ -3,10 +3,11 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, us
 import { LinearGradient } from 'expo-linear-gradient';
 import { AlertTriangle, CheckCircle, Minus, Package, Plus, Truck } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { getProducts, Product, updateProduct } from '../../core/services/productService';
+import { createToastHelpers } from '../../core/utils/toastUtils';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -27,6 +28,7 @@ const Colors = {
 export default function AdminDashboardScreen() {
   const insets = useSafeAreaInsets();
   const { userSession } = useAuth();
+  const toast = createToastHelpers();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingQuantities, setEditingQuantities] = useState<{ [key: string]: string }>({});
@@ -47,7 +49,7 @@ export default function AdminDashboardScreen() {
       setProducts(productsData);
     } catch (error) {
       console.error('Error loading products:', error);
-      Alert.alert('Error', 'Failed to load products');
+      toast.showLoadError('products');
     } finally {
       setLoading(false);
     }
@@ -63,10 +65,19 @@ export default function AdminDashboardScreen() {
       
       // Refresh products
       await loadProducts();
-      Alert.alert('Success', 'Stock updated successfully');
+      toast.showStockUpdatedSuccess();
+      
+      // Show specific warnings based on stock level
+      if (newQuantity < 0) {
+        toast.showStockBackorderWarning(product.name, newQuantity);
+      } else if (newQuantity === 0) {
+        toast.showStockOutWarning(product.name);
+      } else if (newQuantity <= 5) {
+        toast.showStockLowWarning(product.name, newQuantity);
+      }
     } catch (error) {
       console.error('Error updating stock:', error);
-      Alert.alert('Error', 'Failed to update stock');
+      toast.showStockUpdateError();
     }
   };
 
@@ -80,14 +91,14 @@ export default function AdminDashboardScreen() {
     if (currentQuantity > 0) {
       handleUpdateStock(product, currentQuantity - 1);
     } else {
-      Alert.alert('Warning', 'Stock is already at 0');
+      toast.showWarning('Stock Warning', 'Stock is already at 0');
     }
   };
 
   const handleDirectStockUpdate = (product: Product, newQuantity: string) => {
     const quantity = parseInt(newQuantity);
     if (isNaN(quantity) || quantity < 0) {
-      Alert.alert('Invalid Input', 'Please enter a valid positive number');
+      toast.showInvalidQuantityError();
       return;
     }
     handleUpdateStock(product, quantity);
@@ -105,7 +116,7 @@ export default function AdminDashboardScreen() {
     if (editingValue !== undefined) {
       const quantity = parseInt(editingValue);
       if (isNaN(quantity) || quantity < 0) {
-        Alert.alert('Invalid Input', 'Please enter a valid positive number');
+        toast.showInvalidQuantityError();
         // Reset to original value
         setEditingQuantities(prev => ({
           ...prev,
@@ -211,7 +222,10 @@ export default function AdminDashboardScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Stock Management</Text>
-            <TouchableOpacity onPress={loadProducts}>
+            <TouchableOpacity onPress={async () => {
+              await loadProducts();
+              toast.showDashboardRefreshSuccess();
+            }}>
               <Text style={styles.viewAllText}>Refresh</Text>
             </TouchableOpacity>
           </View>

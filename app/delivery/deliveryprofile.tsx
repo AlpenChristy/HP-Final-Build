@@ -23,8 +23,6 @@ const Colors = {
   white: '#FFFFFF',
 };
 
-
-
 // --- Modal Content Components ---
 const EditProfileContent = ({ user, onSave, isSaving }: { user: any, onSave: (name: string, phone: string, email: string) => void, isSaving: boolean }) => {
     const [formData, setFormData] = useState({ 
@@ -55,25 +53,11 @@ const EditProfileContent = ({ user, onSave, isSaving }: { user: any, onSave: (na
 
 
 
-const ForgotPasswordContent = () => (
-    <View>
-        <Text style={styles.infoValue}>Enter your registered email to receive a password reset link.</Text>
-        <View style={[styles.inputGroup, {marginTop: 20}]}>
-            <Text style={styles.inputLabel}>Email Address</Text>
-            <TextInput style={styles.input} keyboardType="email-address" autoCapitalize="none" />
-        </View>
-        <TouchableOpacity style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Send Reset Link</Text>
-        </TouchableOpacity>
-    </View>
-);
-
 export default function DeliveryAgentProfileScreen() {
   const insets = useSafeAreaInsets();
   const { userSession, logout, login } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
-  const [modalView, setModalView] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileData, setProfileData] = useState<any>(userSession);
 
@@ -106,7 +90,6 @@ export default function DeliveryAgentProfileScreen() {
 
   const openModal = async (contentKey: string) => {
       setModalContent(contentKey);
-      setModalView(contentKey); // Set initial view
       if (contentKey === 'editProfile' && userSession?.uid) {
         try {
           const fresh = await userService.getUserById(userSession.uid);
@@ -129,9 +112,8 @@ export default function DeliveryAgentProfileScreen() {
   }
   
   const renderModalContent = () => {
-      switch(modalView) {
+      switch(modalContent) {
           case 'editProfile': return <EditProfileContent user={profileData || userSession} onSave={handleSaveProfile} isSaving={isSavingProfile} />;
-          case 'forgotPassword': return <ForgotPasswordContent />;
           default: return null;
       }
   }
@@ -184,9 +166,8 @@ export default function DeliveryAgentProfileScreen() {
   };
   
   const getModalTitle = () => {
-      if (modalView === 'forgotPassword') return 'Forgot Password';
-      const item = menuItems.find(item => item.action.toString().includes(modalContent));
-      return item ? item.title : '';
+      if (modalContent === 'editProfile') return 'Edit Profile';
+      return '';
   }
 
   return (
@@ -257,17 +238,13 @@ export default function DeliveryAgentProfileScreen() {
       <Modal
         animationType="slide"
         transparent={true}
+        statusBarTranslucent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
             <View style={[styles.modalContainer, {paddingBottom: insets.bottom}]}>
                 <View style={styles.modalHeader}>
-                    {modalView === 'forgotPassword' && (
-                        <TouchableOpacity onPress={() => setModalView('changePassword')} style={styles.modalBack}>
-                            <ArrowLeft size={24} color={Colors.textSecondary} />
-                        </TouchableOpacity>
-                    )}
                     <Text style={styles.modalTitle}>{getModalTitle()}</Text>
                     <TouchableOpacity onPress={() => setModalVisible(false)}>
                         <X size={24} color={Colors.textSecondary} />
@@ -461,18 +438,5 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     color: Colors.white,
   },
-  forgotPasswordButton: {
-      alignSelf: 'flex-end',
-      paddingVertical: 8,
-  },
-  forgotPasswordText: {
-      color: Colors.primary,
-      fontFamily: 'Inter_500Medium',
-  },
-  infoValue: {
-      fontSize: 16,
-      fontFamily: 'Inter_400Regular',
-      color: Colors.textSecondary,
-      lineHeight: 22,
-  },
+
 });

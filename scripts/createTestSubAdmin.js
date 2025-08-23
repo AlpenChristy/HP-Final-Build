@@ -28,12 +28,10 @@ async function createTestSubAdmin() {
     const password = 'password123';
     const displayName = 'Test Sub Admin';
     
-    console.log('Creating test sub-admin user...');
     
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const uid = userCredential.user.uid;
     
-    console.log('Created Firebase user with UID:', uid);
     
     // Create user document
     await setDoc(doc(db, 'users', uid), {
@@ -45,7 +43,6 @@ async function createTestSubAdmin() {
       updatedAt: Date.now(),
     });
     
-    console.log('Created user document');
     
     // Create sub-admin document with permissions
     await setDoc(doc(db, 'subAdmins', uid), {
@@ -65,11 +62,7 @@ async function createTestSubAdmin() {
       isActive: true,
     });
     
-    console.log('Created sub-admin document');
-    console.log('Test sub-admin created successfully!');
-    console.log('Email:', email);
-    console.log('Password:', password);
-    console.log('Permissions: Dashboard, Orders, Products');
+
     
   } catch (error) {
     console.error('Error creating test sub-admin:', error);
@@ -78,6 +71,3 @@ async function createTestSubAdmin() {
 
 // Uncomment the line below to run the script
 // createTestSubAdmin();
-
-console.log('Test sub-admin creation script ready.');
-console.log('Uncomment the last line in the script to create a test sub-admin.');

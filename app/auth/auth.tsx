@@ -4,7 +4,6 @@ import { Eye, EyeOff, Mail, Phone, User } from 'lucide-react-native';
 import { useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Dimensions,
     Image,
     ScrollView,
@@ -17,6 +16,7 @@ import {
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../core/auth/AuthContext';
 import { FIREBASE_AUTH } from '../../core/firebase/firebase';
+import { createToastHelpers } from '../../core/utils/toastUtils';
 
 import { customerAuthService } from '../../core/services/customerAuthService';
 import { deliveryAuthService } from '../../core/services/deliveryAuthService';
@@ -38,6 +38,7 @@ interface FormData {
 
 export default function AuthScreen() {
   const { login } = useAuth();
+  const toast = createToastHelpers();
   const [isLogin, setIsLogin] = useState(true);
   const [usePhoneAuth, setUsePhoneAuth] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -54,37 +55,37 @@ export default function AuthScreen() {
     if (!isLogin) {
       // Registration validation
       if (formData.password !== formData.confirmPassword) {
-        Alert.alert('Error', 'Passwords do not match.');
+        toast.showError('Validation Error', 'Passwords do not match.');
         return false;
       }
       if (!formData.name || !formData.password) {
-        Alert.alert('Error', 'Please fill all required fields for registration.');
+        toast.showError('Validation Error', 'Please fill all required fields for registration.');
         return false;
       }
       if (!usePhoneAuth && !formData.email) {
-        Alert.alert('Error', 'Please enter an email for registration or switch to phone.');
+        toast.showError('Validation Error', 'Please enter an email for registration or switch to phone.');
         return false;
       }
       if (usePhoneAuth && !formData.phone) {
-        Alert.alert('Error', 'Please enter a phone number for registration or switch to email.');
+        toast.showError('Validation Error', 'Please enter a phone number for registration or switch to email.');
         return false;
       }
       if (formData.password.length < 6) {
-        Alert.alert('Error', 'Password must be at least 6 characters long.');
+        toast.showError('Validation Error', 'Password must be at least 6 characters long.');
         return false;
       }
     } else {
       // Login validation
       if (!formData.password) {
-        Alert.alert('Error', 'Please enter your password.');
+        toast.showError('Validation Error', 'Please enter your password.');
         return false;
       }
       if (!usePhoneAuth && !formData.email) {
-        Alert.alert('Error', 'Please enter your email or switch to phone login.');
+        toast.showError('Validation Error', 'Please enter your email or switch to phone login.');
         return false;
       }
       if (usePhoneAuth && !formData.phone) {
-        Alert.alert('Error', 'Please enter your phone number or switch to email login.');
+        toast.showError('Validation Error', 'Please enter your phone number or switch to email login.');
         return false;
       }
     }
@@ -102,21 +103,72 @@ export default function AuthScreen() {
 
       if (isLogin) {
         if (usePhoneAuth) {
-          // Customer login via phone
-          const phoneSession = await customerAuthService.authenticateByPhone(formData.phone, formData.password);
-          if (phoneSession) {
-            await login(phoneSession);
-            Alert.alert('Success', 'Login successful!');
-            setTimeout(() => {
-              if (phoneSession.role === 'admin' || phoneSession.role === 'sub-admin') {
-                router.replace('/admin');
-              } else if (phoneSession.role === 'delivery') {
-                router.replace('/delivery/deliverydashboard');
-              } else {
-                router.replace('/customer/home');
+          // Try customer login via phone first
+          try {
+            const phoneSession = await customerAuthService.authenticateByPhone(formData.phone, formData.password);
+            if (phoneSession) {
+              await login(phoneSession);
+              toast.showLoginSuccess();
+              setTimeout(() => {
+                if (phoneSession.role === 'admin' || phoneSession.role === 'sub-admin') {
+                  router.replace('/admin');
+                } else if (phoneSession.role === 'delivery') {
+                  router.replace('/delivery/deliverydashboard');
+                } else {
+                  router.replace('/customer/home');
+                }
+              }, 300);
+              return;
+            }
+          } catch (customerError) {
+            // If customer auth fails, try sub-admin phone auth
+            try {
+                             const subAdminPhoneSession = await subAdminAuthService.authenticateSubAdminByPhone(formData.phone, formData.password);
+               if (subAdminPhoneSession) {
+                 // Ensure the session has expiresAt and passwordChangedAt
+                 const sessionWithExpiry = {
+                   ...subAdminPhoneSession,
+                   expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+                 };
+                 await login(sessionWithExpiry);
+                 toast.showLoginSuccess();
+                 setTimeout(() => {
+                   router.replace('/admin');
+                 }, 300);
+                 return;
+               }
+            } catch (subAdminError: any) {
+              // Check if it's a specific sub-admin error
+              if (subAdminError.message.includes('deactivated')) {
+                toast.showError('Account Deactivated', 'Your account has been deactivated. Please contact admin.');
+                return;
               }
-            }, 300);
-            return;
+              // Silently continue to next auth method
+            }
+            
+            // If sub-admin auth fails, try delivery agent phone auth
+            try {
+              const deliveryPhoneSession = await deliveryAuthService.authenticateDeliveryAgentByPhone(formData.phone, formData.password);
+              if (deliveryPhoneSession) {
+                await login(deliveryPhoneSession);
+                toast.showDeliveryAgentLoginSuccess();
+                setTimeout(() => {
+                  router.replace('/delivery/deliverydashboard');
+                }, 300);
+                return;
+              }
+            } catch (deliveryError: any) {
+              // Check if it's a specific delivery agent error
+              if (deliveryError.message.includes('deactivated')) {
+                toast.showDeliveryAgentAccountDeactivated();
+                return;
+              } else if (deliveryError.message.includes('Invalid phone number')) {
+                toast.showDeliveryAgentPhoneNotFound();
+                return;
+              }
+              // If all fail, throw the original customer error
+              throw customerError;
+            }
           }
         } else {
           try {
@@ -132,30 +184,40 @@ export default function AuthScreen() {
               const deliverySession = await deliveryAuthService.authenticateDeliveryAgent(formData.email, formData.password);
               if (deliverySession) {
                 await login(deliverySession);
-                Alert.alert('Success', 'Login successful!');
+                toast.showDeliveryAgentLoginSuccess();
                 setTimeout(() => {
                   router.replace('/delivery/deliverydashboard');
                 }, 300);
                 return;
               }
-            } catch (deliveryError) {
+            } catch (deliveryError: any) {
+              // Check if it's a specific delivery agent error
+              if (deliveryError.message.includes('deactivated')) {
+                toast.showDeliveryAgentAccountDeactivated();
+                return;
+              }
               // Silently continue to next auth method
             }
             
-            // Try sub-admin authentication
-            try {
-              const subAdminSession = await subAdminAuthService.authenticateSubAdmin(formData.email, formData.password);
-              if (subAdminSession) {
-                await login(subAdminSession);
-                Alert.alert('Success', 'Login successful!');
-                setTimeout(() => {
-                  router.replace('/admin');
-                }, 300);
-                return;
-              }
-            } catch (subAdminError) {
-              // Silently continue to next auth method
-            }
+                         // Try sub-admin authentication
+             try {
+               const subAdminSession = await subAdminAuthService.authenticateSubAdmin(formData.email, formData.password);
+               if (subAdminSession) {
+                 // Ensure the session has expiresAt
+                 const sessionWithExpiry = {
+                   ...subAdminSession,
+                   expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+                 };
+                 await login(sessionWithExpiry);
+                 toast.showLoginSuccess();
+                 setTimeout(() => {
+                   router.replace('/admin');
+                 }, 300);
+                 return;
+               }
+             } catch (subAdminError) {
+               // Silently continue to next auth method
+             }
             
             // If all email flows fail, throw the original Firebase error
             throw firebaseError;
@@ -175,7 +237,7 @@ export default function AuthScreen() {
             loginTime: Date.now(),
           };
           await login(phoneSession);
-          Alert.alert('Success', 'Registration successful!');
+          toast.showRegistrationSuccess();
           setTimeout(() => {
             router.replace('/customer/home');
           }, 300);
@@ -217,7 +279,7 @@ export default function AuthScreen() {
             permissions,
           };
           await login(emailSession);
-          Alert.alert('Success', 'Registration successful!');
+          toast.showRegistrationSuccess();
           setTimeout(() => {
             if (emailSession.role === 'admin' || emailSession.role === 'sub-admin') {
               router.replace('/admin');
@@ -242,16 +304,18 @@ export default function AuthScreen() {
         const emailLoginSession: UserSession = {
           uid: userCredential.user.uid,
           email: userCredential.user.email || formData.email || undefined,
-          displayName: userCredential.user.displayName || formData.name,
+          displayName: userCredential.user.displayName || userData?.displayName || formData.name,
           phoneNumber: userData?.phoneNumber,
           role: userData?.role || 'customer',
           sessionToken: SessionManager.generateSessionToken(),
           loginTime: Date.now(),
+          expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+          passwordChangedAt: userData?.passwordChangedAt || undefined,
           permissions,
         };
 
         await login(emailLoginSession);
-        Alert.alert('Success', 'Login successful!');
+        toast.showLoginSuccess();
         setTimeout(() => {
           if (emailLoginSession.role === 'admin' || emailLoginSession.role === 'sub-admin') {
             router.replace('/admin');
@@ -265,10 +329,7 @@ export default function AuthScreen() {
       }
     } catch (error: any) {
       console.error('Authentication error:', error);
-      Alert.alert(
-        'Authentication Error',
-        error.message || 'An error occurred during authentication.'
-      );
+      toast.showAuthenticationError(error.message || 'An error occurred during authentication.');
     } finally {
       setIsLoading(false);
     }

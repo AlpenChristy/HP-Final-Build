@@ -74,13 +74,11 @@ const migrateProducts = async () => {
         ...product,
         createdAt: serverTimestamp()
       });
-      console.log(`Added product: ${product.name}`);
     } catch (error) {
       console.error(`Error adding product ${product.name}:`, error);
     }
   }
   
-  console.log('Migration completed');
 };
 
 migrateProducts();

@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { DeliveryAgent, deliveryAgentService } from '../../core/services/deliveryAgentService';
+import { createToastHelpers } from '../../core/utils/toastUtils';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -29,6 +30,7 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
   const insets = useSafeAreaInsets();
   const { userSession } = useAuth();
   const { goBack } = useAdminNavigation();
+  const toast = createToastHelpers();
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
@@ -68,22 +70,22 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
       setAgents(agentsData);
     } catch (error) {
       console.error('Error loading delivery agents:', error);
-      Alert.alert('Error', 'Failed to load delivery agents');
+      toast.showError('Load Error', 'Failed to load delivery agents');
     } finally {
       setLoading(false);
     }
   };
 
-  const openEditModal = (agent: DeliveryAgent | null = null) => {
-    if (agent) {
-      setAgentToEdit(agent);
-      setFormData({
-        name: agent.name,
-        phone: agent.phone,
-        email: agent.email,
-        password: '', // Don't pre-fill password for editing
-      });
-    } else {
+     const openEditModal = (agent: DeliveryAgent | null = null) => {
+     if (agent) {
+       setAgentToEdit(agent);
+       setFormData({
+         name: agent.name,
+         phone: agent.phone || '', // Convert undefined to empty string
+         email: agent.email || '', // Convert undefined to empty string
+         password: '', // Don't pre-fill password for editing
+       });
+     } else {
       setAgentToEdit(null);
       setFormData({
         name: '',
@@ -121,45 +123,87 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
 
   const handleSave = async () => {
     // Validate form data
-    if (!formData.name.trim() || !formData.email.trim() || !formData.phone.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+    if (!formData.name.trim()) {
+      toast.showError('Validation Error', 'Please enter the agent name');
       return;
     }
 
+         // Require either email or phone number (for both new and existing agents)
+     if (!formData.email.trim() && !formData.phone.trim()) {
+       toast.showError('Validation Error', 'Please enter either email or phone number');
+       return;
+     }
+
+    // Validate email format if provided
+    if (formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        toast.showInvalidEmailFormat();
+        return;
+      }
+    }
+
+    // Validate phone format if provided
+    if (formData.phone.trim()) {
+      const phoneRegex = /^\d{10}$/;
+      if (!phoneRegex.test(formData.phone.trim())) {
+        toast.showInvalidPhoneFormat();
+        return;
+      }
+    }
+
     if (!agentToEdit && !formData.password.trim()) {
-      Alert.alert('Error', 'Password is required for new agents');
+      toast.showError('Validation Error', 'Password is required for new agents');
       return;
     }
 
     try {
       setSaving(true);
 
-      if (agentToEdit) {
-        // Update existing agent
-        await deliveryAgentService.updateDeliveryAgent(agentToEdit.uid, {
-          name: formData.name.trim(),
-          phone: formData.phone.trim(),
-          // Note: Email cannot be updated in Firebase Auth easily
-        });
-        Alert.alert('Success', 'Delivery agent updated successfully');
-      } else {
+                    if (agentToEdit) {
+         // Update existing agent
+         const updateData: any = {
+           name: formData.name.trim(),
+         };
+         
+         // Handle phone number - allow clearing it
+         updateData.phone = formData.phone.trim(); // Always include phone, even if empty
+         
+         // Handle email - allow updating it (for phone-only agents who want to add email)
+         updateData.email = formData.email.trim(); // Always include email, even if empty
+         
+         await deliveryAgentService.updateDeliveryAgent(agentToEdit.uid, updateData);
+         toast.showSuccess('Agent Updated', 'Delivery agent updated successfully');
+       } else {
         // Create new agent
         await deliveryAgentService.createDeliveryAgent({
           name: formData.name.trim(),
-          email: formData.email.trim(),
-          phone: formData.phone.trim(),
+          email: formData.email.trim() || undefined,
+          phone: formData.phone.trim() || undefined,
           password: formData.password,
         });
-        Alert.alert('Success', 'Delivery agent created successfully');
+        toast.showSuccess('Agent Created', 'Delivery agent created successfully');
       }
 
       // Reload agents list
       await loadDeliveryAgents();
       closeModals();
-    } catch (error: any) {
-      console.error('Error saving agent:', error);
-      Alert.alert('Error', error.message || 'Failed to save delivery agent');
-    } finally {
+         } catch (error: any) {
+       console.error('Error saving agent:', error);
+       
+               // Handle specific validation errors
+        if (error.message?.includes('Email address is already registered')) {
+          toast.showEmailAlreadyExists();
+        } else if (error.message?.includes('Phone number is already registered')) {
+          toast.showPhoneAlreadyExists();
+        } else if (error.message?.includes('Email address is already registered by another user')) {
+          toast.showEmailAlreadyExists();
+        } else if (error.message?.includes('Phone number is already registered by another user')) {
+          toast.showPhoneAlreadyExists();
+        } else {
+          toast.showError('Save Error', error.message || 'Failed to save delivery agent');
+        }
+     } finally {
       setSaving(false);
     }
   };
@@ -176,11 +220,11 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
           onPress: async () => {
             try {
               await deliveryAgentService.deleteDeliveryAgent(agent.uid);
-              Alert.alert('Success', 'Delivery agent deleted successfully');
+              toast.showSuccess('Agent Deleted', 'Delivery agent deleted successfully');
               await loadDeliveryAgents();
             } catch (error: any) {
               console.error('Error deleting agent:', error);
-              Alert.alert('Error', error.message || 'Failed to delete delivery agent');
+              toast.showError('Delete Error', error.message || 'Failed to delete delivery agent');
             }
           },
         },
@@ -193,17 +237,17 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
 
     // Validate password data
     if (!passwordData.newPassword.trim() || !passwordData.confirmPassword.trim()) {
-      Alert.alert('Error', 'Please fill in all password fields');
+      toast.showError('Validation Error', 'Please fill in all password fields');
       return;
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      toast.showError('Validation Error', 'Passwords do not match');
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+      toast.showError('Validation Error', 'Password must be at least 6 characters long');
       return;
     }
 
@@ -222,11 +266,11 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
                 agentToChangePassword.uid,
                 passwordData.newPassword
               );
-              Alert.alert('Success', 'Password changed successfully. The delivery agent will be logged out immediately.');
+              toast.showSuccess('Password Changed', 'Password changed successfully. The delivery agent will be logged out immediately.');
               closeModals();
             } catch (error: any) {
               console.error('Error changing password:', error);
-              Alert.alert('Error', error.message || 'Failed to change password');
+              toast.showError('Password Change Error', error.message || 'Failed to change password');
             } finally {
               setChangingPassword(false);
             }
@@ -288,11 +332,11 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
       <ScrollView contentContainerStyle={styles.agentsList}>
         {filteredAgents.map((agent) => (
           <TouchableOpacity key={agent.id} style={styles.agentCard} onPress={() => openDetailsModal(agent)}>
-            <View style={styles.agentInfo}>
-              <Text style={styles.agentName}>{agent.name}</Text>
-              <Text style={styles.agentDetail}>{agent.phone}</Text>
-              <Text style={styles.agentDetail}>{agent.email}</Text>
-            </View>
+                         <View style={styles.agentInfo}>
+               <Text style={styles.agentName}>{agent.name}</Text>
+               {agent.phone && <Text style={styles.agentDetail}>{agent.phone}</Text>}
+               {agent.email && <Text style={styles.agentDetail}>{agent.email}</Text>}
+             </View>
             <View style={styles.agentActions}>
               <TouchableOpacity 
                 style={styles.actionButton}
@@ -324,6 +368,7 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
       <Modal
         animationType="slide"
         transparent={true}
+        statusBarTranslucent={true}
         visible={editModalVisible}
         onRequestClose={closeModals}
       >
@@ -343,17 +388,38 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
                     <Text style={styles.inputLabel}>Agent Name</Text>
                     <TextInput style={styles.input} value={formData.name} onChangeText={(text) => setFormData({ ...formData, name: text })} placeholder="Enter full name" />
                 </View>
-                <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Phone Number</Text>
-                    <TextInput style={styles.input} value={formData.phone} onChangeText={(text) => setFormData({ ...formData, phone: text })} placeholder="Enter 10-digit mobile number" keyboardType="phone-pad" />
-                </View>
-                <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Email</Text>
-                    <TextInput style={styles.input} value={formData.email} onChangeText={(text) => setFormData({ ...formData, email: text })} placeholder="Enter email address" keyboardType="email-address" autoCapitalize="none" />
-                </View>
+                                 <View style={styles.inputGroup}>
+                     <Text style={styles.inputLabel}>Phone Number <Text style={styles.optionalText}>(Optional if email provided)</Text></Text>
+                     <TextInput 
+                         style={styles.input} 
+                         value={formData.phone} 
+                         onChangeText={(text) => setFormData({ ...formData, phone: text })} 
+                         placeholder="Enter 10-digit mobile number" 
+                         keyboardType="phone-pad" 
+                         maxLength={10}
+                     />
+                     <Text style={styles.helpText}>Format: 10 digits (e.g., 9876543210)</Text>
+                 </View>
+                 <View style={styles.inputGroup}>
+                     <Text style={styles.inputLabel}>Email <Text style={styles.optionalText}>(Optional if phone provided)</Text></Text>
+                     <TextInput 
+                         style={styles.input} 
+                         value={formData.email} 
+                         onChangeText={(text) => setFormData({ ...formData, email: text })} 
+                         placeholder="Enter email address" 
+                         keyboardType="email-address" 
+                         autoCapitalize="none" 
+                     />
+                     <Text style={styles.helpText}>Format: user@example.com</Text>
+                 </View>
                 <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>Password</Text>
                     <TextInput style={styles.input} value={formData.password} onChangeText={(text) => setFormData({ ...formData, password: text })} placeholder={agentToEdit ? "Enter new password (optional)" : "Enter password"} secureTextEntry />
+                </View>
+                <View style={styles.helpNote}>
+                    <Text style={styles.helpNoteText}>
+                        💡 Note: Delivery agents can login using either their phone number or email address. At least one contact method is required.
+                    </Text>
                 </View>
                 </View>
             </ScrollView>
@@ -378,6 +444,7 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
       <Modal
         animationType="slide"
         transparent={true}
+        statusBarTranslucent={true}
         visible={detailsModalVisible}
         onRequestClose={closeModals}
       >
@@ -392,9 +459,9 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
             {viewingAgent && (
                 <ScrollView>
                     <View style={styles.modalForm}>
-                        <Text style={styles.sectionTitle}>Contact Information</Text>
-                        <View style={styles.detailRow}><Phone size={16} color={Colors.textSecondary}/><Text style={styles.detailText}>{viewingAgent.phone}</Text></View>
-                        <View style={styles.detailRow}><Mail size={16} color={Colors.textSecondary}/><Text style={styles.detailText}>{viewingAgent.email}</Text></View>
+                                                 <Text style={styles.sectionTitle}>Contact Information</Text>
+                         {viewingAgent.phone && <View style={styles.detailRow}><Phone size={16} color={Colors.textSecondary}/><Text style={styles.detailText}>{viewingAgent.phone}</Text></View>}
+                         {viewingAgent.email && <View style={styles.detailRow}><Mail size={16} color={Colors.textSecondary}/><Text style={styles.detailText}>{viewingAgent.email}</Text></View>}
                         
                         <Text style={[styles.sectionTitle, {marginTop: 24}]}>Delivery Statistics</Text>
                         <View style={styles.statsGrid}>
@@ -413,6 +480,7 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
       <Modal
         animationType="slide"
         transparent={true}
+        statusBarTranslucent={true}
         visible={passwordModalVisible}
         onRequestClose={closeModals}
       >
@@ -623,6 +691,33 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 8,
   },
+  optionalText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  helpNote: {
+    backgroundColor: Colors.primaryLighter,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.primary,
+  },
+     helpNoteText: {
+     fontSize: 13,
+     fontFamily: 'Inter_400Regular',
+     color: Colors.primary,
+     lineHeight: 18,
+   },
+   helpText: {
+     fontSize: 12,
+     fontFamily: 'Inter_400Regular',
+     color: Colors.textSecondary,
+     marginTop: 4,
+     fontStyle: 'italic',
+   },
   input: {
     backgroundColor: Colors.background,
     borderRadius: 12,

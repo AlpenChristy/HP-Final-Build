@@ -109,7 +109,8 @@ const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSub
                 <View key={admin.uid} style={styles.subAdminCard}>
                     <View style={{flex: 1}}>
                         <Text style={styles.subAdminName}>{admin.displayName}</Text>
-                        <Text style={styles.subAdminEmail}>{admin.email}</Text>
+                        {admin.email && <Text style={styles.subAdminEmail}>{admin.email}</Text>}
+                        {admin.phoneNumber && <Text style={styles.subAdminEmail}>{admin.phoneNumber}</Text>}
                         <View style={styles.permissionTags}>
                             {admin.permissions.orders && <Text style={styles.permissionTag}>Orders</Text>}
                             {admin.permissions.delivery && <Text style={styles.permissionTag}>Delivery</Text>}
@@ -161,8 +162,6 @@ const PromocodeContent = ({ setModalView, setEditingPromocode, promocodes, onDel
     onDeletePromocode: (id: string) => void
 }) => {
     const handleEdit = (promocode: PromocodeData) => {
-        console.log('Editing promocode:', promocode); // Debug log
-        console.log('Promocode ID:', promocode.id); // Debug log
         
         if (!promocode.id) {
             console.error('Promocode has no ID:', promocode);
@@ -201,7 +200,6 @@ const PromocodeContent = ({ setModalView, setEditingPromocode, promocodes, onDel
         }
     };
 
-    console.log('Rendering promocodes:', promocodes); // Debug log
     
     return (
         <View>
@@ -329,8 +327,6 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
 
         setIsLoading(true);
         try {
-            console.log('Saving form data, editingPromocode:', editingPromocode); // Debug log
-            console.log('Editing promocode ID:', editingPromocode?.id); // Debug log
             
             await onSave({
                 code: formData.code.trim().toUpperCase(),
@@ -487,7 +483,6 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
                 <Switch 
                     value={formData.showOnHome || false} 
                     onValueChange={(value) => {
-                        console.log('Toggle changed to:', value);
                         setFormData({...formData, showOnHome: value});
                     }} 
                     trackColor={{false: Colors.border, true: Colors.primaryLight}} 
@@ -749,14 +744,69 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
     });
     const [isLoading, setIsLoading] = useState(false);
 
+    // Update form data when editingAdmin changes
+    useEffect(() => {
+        if (editingAdmin) {
+            setFormData({
+                name: editingAdmin.displayName || '',
+                phone: editingAdmin.phoneNumber || '',
+                email: editingAdmin.email || '',
+                password: '', // Always start with empty password for editing
+            });
+            setPermissions({
+                orders: editingAdmin.permissions?.orders || false,
+                delivery: editingAdmin.permissions?.delivery || false,
+                products: editingAdmin.permissions?.products || false,
+            });
+        } else {
+            // Reset form for new sub-admin
+            setFormData({
+                name: '',
+                phone: '',
+                email: '',
+                password: '',
+            });
+            setPermissions({
+                orders: false,
+                delivery: false,
+                products: false,
+            });
+        }
+    }, [editingAdmin]);
+
     const togglePermission = (key: keyof SubAdminPermissions) => {
         setPermissions(prev => ({...prev, [key]: !prev[key]}));
     };
 
     const handleSave = async () => {
-        if (!formData.name.trim() || !formData.email.trim()) {
-            Alert.alert('Error', 'Please fill in all required fields.');
+        // Validate form data
+        if (!formData.name.trim()) {
+            Alert.alert('Error', 'Please enter the sub-admin name');
             return;
+        }
+
+        // Require either email or phone number (for both new and existing sub-admins)
+        if (!formData.email.trim() && !formData.phone.trim()) {
+            Alert.alert('Error', 'Please enter either email or phone number');
+            return;
+        }
+
+        // Validate email format if provided
+        if (formData.email.trim()) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(formData.email.trim())) {
+                Alert.alert('Error', 'Please enter a valid email address');
+                return;
+            }
+        }
+
+        // Validate phone format if provided
+        if (formData.phone.trim()) {
+            const phoneRegex = /^\d{10}$/;
+            if (!phoneRegex.test(formData.phone.trim())) {
+                Alert.alert('Error', 'Please enter a valid 10-digit phone number');
+                return;
+            }
         }
 
         if (!editingAdmin && !formData.password.trim()) {
@@ -795,17 +845,19 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
                 />
             </View>
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Phone Number</Text>
+                <Text style={styles.inputLabel}>Phone Number <Text style={styles.optionalText}>(Optional if email provided)</Text></Text>
                 <TextInput 
                     style={styles.input} 
                     value={formData.phone} 
                     onChangeText={text => setFormData({...formData, phone: text})} 
-                    placeholder="Enter phone number" 
+                    placeholder="Enter 10-digit mobile number" 
                     keyboardType="phone-pad" 
+                    maxLength={10}
                 />
+                <Text style={styles.helpText}>Format: 10 digits (e.g., 9876543210)</Text>
             </View>
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Email *</Text>
+                <Text style={styles.inputLabel}>Email <Text style={styles.optionalText}>(Optional if phone provided)</Text></Text>
                 <TextInput 
                     style={styles.input} 
                     value={formData.email} 
@@ -813,10 +865,10 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
                     placeholder="Enter email address" 
                     keyboardType="email-address" 
                     autoCapitalize="none"
-                    editable={!editingAdmin} // Don't allow email editing for existing users
                 />
+                <Text style={styles.helpText}>Format: user@example.com</Text>
             </View>
-            {!editingAdmin && (
+            {!editingAdmin ? (
                 <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>Password *</Text>
                     <TextInput 
@@ -827,7 +879,25 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
                         secureTextEntry 
                     />
                 </View>
+            ) : (
+                <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>New Password <Text style={styles.optionalText}>(Leave empty to keep current)</Text></Text>
+                    <TextInput 
+                        style={styles.input} 
+                        value={formData.password} 
+                        onChangeText={text => setFormData({...formData, password: text})} 
+                        placeholder="Enter new password (optional)" 
+                        secureTextEntry 
+                    />
+                    <Text style={styles.helpText}>Only enter if you want to change the password</Text>
+                </View>
             )}
+            
+            <View style={styles.helpNote}>
+                <Text style={styles.helpNoteText}>
+                    💡 Note: Sub-admins can login using either their phone number or email address. At least one contact method is required.
+                </Text>
+            </View>
             
             <Text style={styles.modalSectionTitle}>Module Access</Text>
             <View style={styles.permissionRow}>
@@ -903,7 +973,6 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
 
   // Load sub-admins, promocodes, and notifications when component mounts
   useEffect(() => {
-    console.log('Component mounted, userSession:', userSession); // Debug log
     loadSubAdmins();
     loadPromocodes();
     loadNotifications();
@@ -911,7 +980,6 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
 
   // Monitor promocodes state changes
   useEffect(() => {
-    console.log('Promocodes state changed:', promocodes); // Debug log
   }, [promocodes]);
 
 
@@ -940,22 +1008,35 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
       if (data.isEdit) {
         // Update existing sub-admin
         await subAdminService.updateSubAdminPermissions(data.uid, data.permissions);
-        if (data.displayName !== editingAdmin?.displayName || data.phoneNumber !== editingAdmin?.phoneNumber) {
-          await subAdminService.updateSubAdminProfile(data.uid, {
-            displayName: data.displayName,
-            phoneNumber: data.phoneNumber,
-          });
+        
+        // Check if profile data needs updating
+        const needsProfileUpdate = 
+          data.displayName !== editingAdmin?.displayName || 
+          data.phoneNumber !== editingAdmin?.phoneNumber ||
+          data.email !== editingAdmin?.email;
+          
+        // Always update profile data for sub-admins to ensure all fields are properly handled
+        await subAdminService.updateSubAdminProfile(data.uid, {
+          displayName: data.displayName,
+          phoneNumber: data.phoneNumber,
+          email: data.email,
+        });
+
+        // Check if password needs updating
+        if (data.password && data.password.trim() !== '') {
+          await subAdminService.changeSubAdminPassword(data.uid, data.password.trim());
         }
+
         Alert.alert('Success', 'Sub-admin updated successfully!');
       } else {
         // Create new sub-admin
         await subAdminService.createSubAdmin(
           userSession.uid,
           {
-            email: data.email,
+            email: data.email || undefined,
             password: data.password,
             displayName: data.displayName,
-            phoneNumber: data.phoneNumber,
+            phoneNumber: data.phoneNumber || undefined,
             permissions: data.permissions,
           }
         );
@@ -967,9 +1048,21 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
       setModalVisible(false);
       setModalView('list');
       setEditingAdmin(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving sub-admin:', error);
-      Alert.alert('Error', 'Failed to save sub-admin. Please try again.');
+      
+      // Handle specific validation errors
+      if (error.message?.includes('Email address is already registered')) {
+        Alert.alert('Error', 'This email address is already registered.');
+      } else if (error.message?.includes('Phone number is already registered')) {
+        Alert.alert('Error', 'This phone number is already registered.');
+      } else if (error.message?.includes('Email address is already registered by another user')) {
+        Alert.alert('Error', 'This email address is already registered by another user.');
+      } else if (error.message?.includes('Phone number is already registered by another user')) {
+        Alert.alert('Error', 'This phone number is already registered by another user.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to save sub-admin. Please try again.');
+      }
     }
   };
 
@@ -1047,13 +1140,10 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const loadPromocodes = async () => {
     if (!userSession?.uid) return;
     
-    console.log('Loading promocodes for userSession.uid:', userSession.uid); // Debug log
     
     setIsLoadingPromocodes(true);
     try {
       const adminPromocodes = await promocodeService.getPromocodesByAdmin(userSession.uid);
-      console.log('Loaded promocodes:', adminPromocodes); // Debug log
-      console.log('Setting promocodes state with length:', adminPromocodes.length); // Debug log
       setPromocodes(adminPromocodes);
     } catch (error) {
       console.error('Error loading promocodes:', error);
@@ -1068,11 +1158,9 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
       return;
     }
 
-    console.log('Saving promocode data:', data); // Debug log
 
     try {
       if (data.isEdit) {
-        console.log('Updating promocode with ID:', data.id); // Debug log
         
         // Check if ID exists
         if (!data.id) {
@@ -1107,7 +1195,6 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         await promocodeService.updatePromocode(data.id, updateData);
         Alert.alert('Success', 'Promocode updated successfully!');
       } else {
-        console.log('Creating new promocode'); // Debug log
         // Create new promocode
         const createData: any = {
           code: data.code,
@@ -1455,6 +1542,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
       <Modal
         animationType="slide"
         transparent={true}
+        statusBarTranslucent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
@@ -1607,6 +1695,33 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: Colors.text,
     marginBottom: 8,
+  },
+  optionalText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  helpText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  helpNote: {
+    backgroundColor: Colors.primaryLighter,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.primary,
+  },
+  helpNoteText: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.primary,
+    lineHeight: 18,
   },
   requiredAsterisk: {
     color: Colors.red,

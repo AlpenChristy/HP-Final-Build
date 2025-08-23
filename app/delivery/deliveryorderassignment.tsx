@@ -1,16 +1,12 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { ArrowLeft, CheckCircle, MapPin, Package, Phone, Truck, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { OrderData, orderService } from '../../core/services/orderService';
-
-// Navigation type
-interface DeliveryOrdersScreenProps {
-  navigation: any;
-}
 
 // --- Red Color Palette ---
 const Colors = {
@@ -28,7 +24,7 @@ const Colors = {
   green: '#16A34A',
 };
 
-export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScreenProps) {
+export default function DeliveryOrdersScreen() {
   const insets = useSafeAreaInsets();
   const { userSession } = useAuth();
   const [activeTab, setActiveTab] = useState('assigned');
@@ -246,7 +242,7 @@ export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScree
         style={[styles.header, { paddingTop: insets.top + 10 }]}
       >
         <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.headerIcon}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
                 <ArrowLeft size={26} color={Colors.white} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>My Deliveries</Text>
@@ -301,6 +297,7 @@ export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScree
       <Modal
         visible={showNoteModal}
         transparent={true}
+        statusBarTranslucent={true}
         animationType="slide"
         onRequestClose={() => setShowNoteModal(false)}
       >

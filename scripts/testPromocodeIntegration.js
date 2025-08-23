@@ -88,36 +88,26 @@ const mockPromocodeService = {
 
 // Test function
 async function testPromocodeIntegration() {
-  console.log('🧪 Testing Promocode Integration with Home Page...\n');
 
   try {
     // Test 1: Get active promocodes
-    console.log('1. Testing getActivePromocodes()...');
     const activePromocodes = await mockPromocodeService.getActivePromocodes();
-    console.log(`   ✅ Found ${activePromocodes.length} active promocodes`);
     
     if (activePromocodes.length > 0) {
-      console.log('   Sample promocodes:');
       activePromocodes.slice(0, 3).forEach((promo, index) => {
-        console.log(`   ${index + 1}. ${promo.code} - ${promo.discountValue}${promo.discountType === 'percentage' ? '%' : '$'} off`);
       });
     }
 
     // Test 2: Get featured promocodes
-    console.log('\n2. Testing getFeaturedPromocodes()...');
     const featuredPromocodes = await mockPromocodeService.getFeaturedPromocodes(3);
-    console.log(`   ✅ Found ${featuredPromocodes.length} featured promocodes`);
     
     if (featuredPromocodes.length > 0) {
-      console.log('   Featured promocodes (sorted by priority):');
       featuredPromocodes.forEach((promo, index) => {
         const usagePercent = ((promo.usedCount / promo.usageLimit) * 100).toFixed(1);
-        console.log(`   ${index + 1}. ${promo.code} - ${promo.discountValue}${promo.discountType === 'percentage' ? '%' : '$'} off (${usagePercent}% used)`);
       });
     }
 
     // Test 3: Verify sorting logic
-    console.log('\n3. Testing sorting logic...');
     if (featuredPromocodes.length >= 2) {
       const first = featuredPromocodes[0];
       const second = featuredPromocodes[1];
@@ -128,18 +118,11 @@ async function testPromocodeIntegration() {
                          ((second.usedCount / second.usageLimit) * 100) + (second.createdAt / 1000000);
       
       if (firstScore >= secondScore) {
-        console.log('   ✅ Sorting logic working correctly (higher scores first)');
       } else {
-        console.log('   ❌ Sorting logic issue detected');
       }
     }
 
-    console.log('\n🎉 All tests completed successfully!');
-    console.log('\n📋 Integration Summary:');
-    console.log('   • getFeaturedPromocodes() method implemented');
-    console.log('   • Smart sorting by discount value, usage, and recency');
-    console.log('   • Ready for home page integration');
-    console.log('   • Fallback to default banner when no promocodes available');
+   
 
   } catch (error) {
     console.error('❌ Test failed:', error);

@@ -56,21 +56,16 @@ export default function DeliverySummaryScreen() {
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
       
-      console.log('Today date range:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
       
       // Get all orders and filter by delivery agent
       let agentOrders = await orderService.getOrdersByDeliveryAgent(userSession.uid);
       
       // If no orders found, try getting all orders and filtering manually
       if (agentOrders.length === 0) {
-        console.log('No orders found with delivery agent query, trying manual filter...');
         const allOrders = await orderService.getAllOrders();
         agentOrders = allOrders.filter(order => order.deliveryAgentId === userSession.uid);
-        console.log('Manual filter found:', agentOrders.length, 'orders');
       }
       
-      console.log('All agent orders:', agentOrders.length);
-      console.log('Agent UID:', userSession.uid);
       
       // Filter today's orders - check both orderDate and deliveredAt for today's deliveries
       const todayOrders = agentOrders.filter(order => {
@@ -84,7 +79,6 @@ export default function DeliverySummaryScreen() {
         return isOrderedToday || isDeliveredToday;
       });
       
-      console.log('Today orders:', todayOrders.length);
       
       // Calculate stats
       const totalDeliveries = todayOrders.length;
@@ -97,18 +91,14 @@ export default function DeliverySummaryScreen() {
       
       // Calculate total value of delivered products TODAY only
       const todayCompletedOrders = todayOrders.filter(order => order.orderStatus === 'delivered');
-      console.log('Today completed orders for total value:', todayCompletedOrders.length);
       
       const earnings = todayCompletedOrders.reduce((total, order) => {
-        console.log(`Today's Order ${order.orderId || order.id}: Total value ₹${order.total}`);
         return total + order.total;
       }, 0);
       
-      console.log('Total value of TODAY\'s delivered products:', earnings);
       
       // If no today's orders found, show all-time stats as fallback
       if (totalDeliveries === 0) {
-        console.log('No today\'s orders found, showing all-time stats as fallback');
         const allTimeCompleted = agentOrders.filter(order => order.orderStatus === 'delivered').length;
         const allTimePending = agentOrders.filter(order => 
           order.orderStatus === 'pending' || 
@@ -161,14 +151,7 @@ export default function DeliverySummaryScreen() {
       
       setRecentDeliveries(recentCompletedOrders);
       
-      // Log final stats for debugging
-      console.log('Final stats:', {
-        totalDeliveries,
-        completedDeliveries,
-        pendingDeliveries,
-        earnings,
-        recentDeliveriesCount: recentCompletedOrders.length
-      });
+      
       
     } catch (error) {
       console.error('Error loading delivery data:', error);

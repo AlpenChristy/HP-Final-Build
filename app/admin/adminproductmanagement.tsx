@@ -1,15 +1,14 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Camera, Edit, Plus, Search, Trash2, UploadCloud, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Import services
+import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { pickImage, takePhoto, uploadToCloudinary } from '../../core/services/cloudinaryService';
 import { Product, addProduct, deleteProduct, getProducts, updateProduct } from '../../core/services/productService';
-import { router } from 'expo-router';
-import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -332,6 +331,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
         animationType="slide"
         transparent={true}
         visible={modalVisible}
+        statusBarTranslucent={true}
         onRequestClose={closeModal}
       >
         <View style={styles.modalOverlay}>

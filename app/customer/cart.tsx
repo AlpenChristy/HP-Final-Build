@@ -43,7 +43,6 @@ const initialCartItems = [
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
   
-  console.log('CartScreen: About to use cart context');
   
   const { 
     cartItems, 
@@ -59,12 +58,7 @@ export default function CartScreen() {
     recalculatePromocodeDiscount
   } = useCart();
   
-  console.log('CartScreen: Cart context loaded successfully', { 
-    cartItemsCount: cartItems?.length, 
-    loading, 
-    appliedPromocode: !!appliedPromocode, 
-    discount 
-  });
+  
   const [promoCode, setPromoCode] = useState('');
   const [isLoadingPromocode, setIsLoadingPromocode] = useState(false);
   const [promocodeError, setPromocodeError] = useState('');
@@ -102,11 +96,6 @@ export default function CartScreen() {
         setPromocodeError(''); // Clear any previous errors
       }
       
-      console.log('Promocode discount recalculated:', {
-        valid: result.valid,
-        discount: result.discount,
-        error: result.error
-      });
     }
   }, [cartItems, appliedPromocode]); // Recalculate when cart items or applied promocode changes
 
@@ -425,7 +414,6 @@ export default function CartScreen() {
                   if (appliedPromocode) {
                       try {
                           await promocodeService.incrementUsageCount(appliedPromocode.id);
-                          console.log('Promocode usage incremented');
                       } catch (error) {
                           console.error('Error incrementing promocode usage:', error);
                       }

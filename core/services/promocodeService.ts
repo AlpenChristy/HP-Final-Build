@@ -106,7 +106,6 @@ export const promocodeService = {
   // Get all promocodes created by a specific admin
   async getPromocodesByAdmin(adminUid: string): Promise<PromocodeData[]> {
     try {
-      console.log('Getting promocodes for admin:', adminUid); // Debug log
       
       // First try a simple query without orderBy to see if that's the issue
       const q = query(
@@ -114,24 +113,19 @@ export const promocodeService = {
         where('createdBy', '==', adminUid)
       );
       
-      console.log('Query created, executing...'); // Debug log
       const querySnapshot = await getDocs(q);
-      console.log('Query executed, found documents:', querySnapshot.size); // Debug log
       
       // Also check all promocodes in the database
       const allPromocodesQuery = query(collection(FIREBASE_DB, 'promocodes'));
       const allPromocodesSnapshot = await getDocs(allPromocodesQuery);
-      console.log('Total promocodes in database:', allPromocodesSnapshot.size);
       allPromocodesSnapshot.forEach((doc) => {
         const data = doc.data();
-        console.log('All promocodes - ID:', doc.id, 'Created by:', data.createdBy, 'Code:', data.code);
       });
       
       const promocodes: PromocodeData[] = [];
 
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        console.log('Processing promocode doc:', doc.id, data); // Debug log
         
         // Validate that the document has required fields
         if (!data.code || !data.discountType || !data.discountValue) {
@@ -159,7 +153,6 @@ export const promocodeService = {
         });
       });
 
-      console.log('Returning promocodes:', promocodes); // Debug log
       return promocodes;
     } catch (error) {
       console.error('Error getting promocodes by admin:', error);
@@ -245,8 +238,6 @@ export const promocodeService = {
   // Update promocode
   async updatePromocode(id: string, updateData: UpdatePromocodeData): Promise<void> {
     try {
-      console.log('Updating promocode with ID:', id); // Debug log
-      console.log('Update data:', updateData); // Debug log
       
       const timestamp = Date.now();
       const docRef = doc(FIREBASE_DB, 'promocodes', id);
@@ -307,7 +298,6 @@ export const promocodeService = {
         updatePayload.validUntil = Timestamp.fromDate(updateData.validUntil);
       }
 
-      console.log('Final update payload:', updatePayload); // Debug log
       await updateDoc(docRef, updatePayload);
     } catch (error) {
       console.error('Error updating promocode:', error);

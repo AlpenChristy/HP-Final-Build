@@ -50,6 +50,53 @@ export const deliveryAuthService = {
     }
   },
 
+  // Authenticate delivery agent with phone number and password
+  async authenticateDeliveryAgentByPhone(phoneNumber: string, password: string): Promise<UserSession | null> {
+    try {
+      // Query the unified users collection for delivery role with phone number
+      const usersQuery = query(
+        collection(FIREBASE_DB, 'users'),
+        where('phoneNumber', '==', phoneNumber),
+        where('role', '==', 'delivery')
+      );
+
+      const usersSnapshot = await getDocs(usersQuery);
+
+      if (usersSnapshot.empty) {
+        throw new Error('Invalid phone number or password');
+      }
+
+      const userDoc = usersSnapshot.docs[0];
+      const userData = userDoc.data() as any;
+
+      // Check password (NOTE: plaintext per existing flow; should be hashed in production)
+      if (userData.password !== password) {
+        throw new Error('Invalid phone number or password');
+      }
+
+      // Check if agent is active
+      if (userData.isActive === false) {
+        throw new Error('Your account has been deactivated. Please contact admin.');
+      }
+
+      // Create user session
+      const userSession: UserSession = {
+        uid: userDoc.id,
+        email: userData.email,
+        phoneNumber: userData.phoneNumber,
+        displayName: userData.displayName,
+        role: 'delivery',
+        sessionToken: SessionManager.generateSessionToken(),
+        loginTime: Date.now(),
+        expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+      };
+
+      return userSession;
+    } catch (error: any) {
+      throw error;
+    }
+  },
+
   // Check if email exists in delivery credentials
   async checkEmailExists(email: string): Promise<boolean> {
     try {

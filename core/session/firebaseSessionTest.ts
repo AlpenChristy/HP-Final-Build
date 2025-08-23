@@ -6,21 +6,15 @@ export class FirebaseSessionTest {
    * Test Firebase session management
    */
   static async testFirebaseSession() {
-    console.log('=== Firebase Session Management Test ===');
     
     try {
       // Test 1: Check current authentication state
-      console.log('1. Checking current auth state...');
       const currentUser = FIREBASE_AUTH.currentUser;
-      console.log('Current user:', currentUser ? currentUser.email : 'No user');
       
       // Test 2: Set up auth state listener
-      console.log('2. Setting up auth state listener...');
       const unsubscribe = onAuthStateChanged(FIREBASE_AUTH, (user) => {
         if (user) {
-          console.log('Auth state: User is signed in -', user.email);
         } else {
-          console.log('Auth state: User is signed out');
         }
       });
       
@@ -40,7 +34,6 @@ export class FirebaseSessionTest {
       console.log('Logout successful');
       */
       
-      console.log('=== Firebase Session Test Complete ===');
       
       // Cleanup
       unsubscribe();

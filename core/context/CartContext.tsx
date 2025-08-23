@@ -41,7 +41,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [discount, setDiscount] = useState(0);
   const auth = FIREBASE_AUTH;
 
-  console.log('CartProvider initialized with:', { cartItems: cartItems.length, loading, appliedPromocode, discount });
 
   // Fetch cart items when the component mounts or user changes
   useEffect(() => {

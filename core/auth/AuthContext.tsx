@@ -37,7 +37,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     if (!userSession?.uid || (userSession.role !== 'delivery' && userSession.role !== 'sub-admin')) return;
 
-    console.log(`Setting up password change monitoring for ${userSession.role}:`, userSession.uid);
     
     const userRef = doc(FIREBASE_DB, 'users', userSession.uid);
     const unsubscribe = onSnapshot(userRef, async (doc) => {
@@ -49,7 +48,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // If password was changed after the session was created, force logout
         if (currentPasswordChangedAt && 
             (!sessionPasswordChangedAt || currentPasswordChangedAt > sessionPasswordChangedAt)) {
-          console.log(`Password change detected for ${userSession.role}, forcing logout`);
           await handleLogout();
         }
       }
@@ -69,7 +67,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (hasValidSession) {
           const existingSession = await SessionManager.getSession();
           if (existingSession) {
-            console.log('Found valid existing session:', existingSession.email || existingSession.phoneNumber || existingSession.uid);
             setUserSession(existingSession);
           }
         }
@@ -82,7 +79,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Listen to Firebase auth state changes
     const unsubscribe = onAuthStateChanged(FIREBASE_AUTH, async (firebaseUser) => {
-      console.log('Firebase auth state changed:', firebaseUser ? 'User authenticated' : 'User not authenticated');
       setUser(firebaseUser);
       
       if (firebaseUser && !userSession) {
@@ -110,13 +106,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               role: userData.role || 'customer',
               sessionToken: SessionManager.generateSessionToken(),
               loginTime: Date.now(),
+              expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
               passwordChangedAt: userData.passwordChangedAt || undefined,
               permissions,
             };
             
             await SessionManager.saveSession(newSession);
             setUserSession(newSession);
-            console.log('Created session from Firebase auth for:', newSession.email || newSession.phoneNumber || newSession.uid, 'Role:', newSession.role);
           }
         } catch (error) {
           console.error('Error creating session from Firebase user:', error);
@@ -148,7 +144,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       await SessionManager.saveSession(session);
       setUserSession(session);
-      console.log('Session saved successfully for:', session.email || session.phoneNumber || session.uid);
     } catch (error) {
       console.error('Error saving session:', error);
       throw error;
@@ -167,7 +162,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
       
       setUser(null);
-      console.log('User logged out successfully');
     } catch (error) {
       console.error('Error during logout:', error);
       throw error;
