@@ -33,11 +33,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Monitor password changes for delivery agents
+  // Monitor password changes for delivery agents and sub-admins
   useEffect(() => {
-    if (!userSession?.uid || userSession.role !== 'delivery') return;
+    if (!userSession?.uid || (userSession.role !== 'delivery' && userSession.role !== 'sub-admin')) return;
 
-    console.log('Setting up password change monitoring for delivery agent:', userSession.uid);
+    console.log(`Setting up password change monitoring for ${userSession.role}:`, userSession.uid);
     
     const userRef = doc(FIREBASE_DB, 'users', userSession.uid);
     const unsubscribe = onSnapshot(userRef, async (doc) => {
@@ -49,7 +49,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // If password was changed after the session was created, force logout
         if (currentPasswordChangedAt && 
             (!sessionPasswordChangedAt || currentPasswordChangedAt > sessionPasswordChangedAt)) {
-          console.log('Password change detected for delivery agent, forcing logout');
+          console.log(`Password change detected for ${userSession.role}, forcing logout`);
           await handleLogout();
         }
       }

@@ -303,8 +303,9 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
               <TouchableOpacity 
                 style={[styles.actionButton, styles.passwordButton]}
                 onPress={() => openPasswordModal(agent)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Lock size={18} color={Colors.yellow} />
+                <Lock size={18} color={Colors.white} />
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.actionButton, styles.deleteButton]}

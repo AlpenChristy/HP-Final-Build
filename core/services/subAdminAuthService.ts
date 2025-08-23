@@ -1,17 +1,18 @@
-// File: core/services/deliveryAuthService.ts
+// File: core/services/subAdminAuthService.ts
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { FIREBASE_DB } from '../firebase/firebase';
 import { SessionManager, UserSession } from '../session/sessionManager';
+import { subAdminService } from './subAdminService';
 
-export const deliveryAuthService = {
-  // Authenticate delivery agent with email and password
-  async authenticateDeliveryAgent(email: string, password: string): Promise<UserSession | null> {
+export const subAdminAuthService = {
+  // Authenticate sub-admin with email and password
+  async authenticateSubAdmin(email: string, password: string): Promise<UserSession | null> {
     try {
-      // Query the unified users collection for delivery role
+      // Query the unified users collection for sub-admin role
       const usersQuery = query(
         collection(FIREBASE_DB, 'users'),
         where('email', '==', email),
-        where('role', '==', 'delivery')
+        where('role', '==', 'sub-admin')
       );
 
       const usersSnapshot = await getDocs(usersQuery);
@@ -28,9 +29,15 @@ export const deliveryAuthService = {
         throw new Error('Invalid email or password');
       }
 
-      // Check if agent is active
+      // Check if sub-admin is active
       if (userData.isActive === false) {
         throw new Error('Your account has been deactivated. Please contact admin.');
+      }
+
+      // Get sub-admin permissions
+      const subAdminData = await subAdminService.getSubAdminById(userDoc.id);
+      if (!subAdminData) {
+        throw new Error('Sub-admin data not found');
       }
 
       // Create user session
@@ -38,32 +45,35 @@ export const deliveryAuthService = {
         uid: userDoc.id,
         email: userData.email,
         displayName: userData.displayName,
-        role: 'delivery',
+        role: 'sub-admin',
         sessionToken: SessionManager.generateSessionToken(),
         loginTime: Date.now(),
         expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+        passwordChangedAt: userData.passwordChangedAt || undefined,
+        permissions: subAdminData.permissions,
       };
 
       return userSession;
     } catch (error: any) {
+      console.error('Error authenticating sub-admin:', error);
       throw error;
     }
   },
 
-  // Check if email exists in delivery credentials
+  // Check if email exists in sub-admin credentials
   async checkEmailExists(email: string): Promise<boolean> {
     try {
       const usersQuery = query(
         collection(FIREBASE_DB, 'users'),
         where('email', '==', email),
-        where('role', '==', 'delivery')
+        where('role', '==', 'sub-admin')
       );
 
       const usersSnapshot = await getDocs(usersQuery);
       return !usersSnapshot.empty;
     } catch (error) {
-      console.error('Error checking email:', error);
+      console.error('Error checking sub-admin email:', error);
       return false;
     }
-  }
+  },
 };

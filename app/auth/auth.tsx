@@ -3,16 +3,16 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfi
 import { Eye, EyeOff, Mail, Phone, User } from 'lucide-react-native';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -20,6 +20,7 @@ import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 
 import { customerAuthService } from '../../core/services/customerAuthService';
 import { deliveryAuthService } from '../../core/services/deliveryAuthService';
+import { subAdminAuthService } from '../../core/services/subAdminAuthService';
 import { subAdminService } from '../../core/services/subAdminService';
 import { userService } from '../../core/services/userService';
 import { SessionManager, UserSession } from '../../core/session/sessionManager';
@@ -124,8 +125,9 @@ export default function AuthScreen() {
             // Get user data from Firestore
             userData = await userService.getUserById(userCredential.user.uid);
           } catch (firebaseError: any) {
-            // If Firebase Auth fails, try delivery agent authentication (email based)
-            console.log('Firebase Auth failed, trying delivery agent auth...');
+            // If Firebase Auth fails, try delivery agent and sub-admin authentication (email based)
+            
+            // Try delivery agent authentication
             try {
               const deliverySession = await deliveryAuthService.authenticateDeliveryAgent(formData.email, formData.password);
               if (deliverySession) {
@@ -137,9 +139,25 @@ export default function AuthScreen() {
                 return;
               }
             } catch (deliveryError) {
-              console.log('Delivery auth also failed');
+              // Silently continue to next auth method
             }
-            // If both email flows fail, throw the original Firebase error
+            
+            // Try sub-admin authentication
+            try {
+              const subAdminSession = await subAdminAuthService.authenticateSubAdmin(formData.email, formData.password);
+              if (subAdminSession) {
+                await login(subAdminSession);
+                Alert.alert('Success', 'Login successful!');
+                setTimeout(() => {
+                  router.replace('/admin');
+                }, 300);
+                return;
+              }
+            } catch (subAdminError) {
+              // Silently continue to next auth method
+            }
+            
+            // If all email flows fail, throw the original Firebase error
             throw firebaseError;
           }
         }

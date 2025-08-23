@@ -117,13 +117,23 @@ const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSub
                         </View>
                     </View>
                     <View style={styles.subAdminActions}>
-                        <TouchableOpacity onPress={() => handleEdit(admin)}>
+                        <TouchableOpacity 
+                            style={[styles.actionButton, styles.editButton]}
+                            onPress={() => handleEdit(admin)}
+                        >
                             <Edit size={18} color={Colors.primary} />
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => handleChangePassword(admin)}>
-                            <Lock size={18} color={Colors.yellow} />
+                        <TouchableOpacity 
+                            style={[styles.actionButton, styles.passwordButton]}
+                            onPress={() => handleChangePassword(admin)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <Lock size={18} color={Colors.white} />
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => handleDelete(admin)}>
+                        <TouchableOpacity 
+                            style={[styles.actionButton, styles.deleteButton]}
+                            onPress={() => handleDelete(admin)}
+                        >
                             <Trash2 size={18} color={Colors.red} />
                         </TouchableOpacity>
                     </View>
@@ -904,6 +914,8 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
     console.log('Promocodes state changed:', promocodes); // Debug log
   }, [promocodes]);
 
+
+
   const loadSubAdmins = async () => {
     if (!userSession?.uid) return;
     
@@ -975,8 +987,10 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const handleChangeSubAdminPassword = (admin: SubAdminData) => {
     setSubAdminToChangePassword(admin);
     setPasswordData({ newPassword: '', confirmPassword: '' });
-    setPasswordModalVisible(true);
+    setModalView('changePassword');
   };
+
+
 
   const handleChangePassword = async () => {
     if (!subAdminToChangePassword) return;
@@ -1013,7 +1027,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
                 passwordData.newPassword
               );
               Alert.alert('Success', 'Password changed successfully. The sub-admin will be logged out immediately.');
-              setPasswordModalVisible(false);
+              setModalView('list');
               setSubAdminToChangePassword(null);
               setPasswordData({ newPassword: '', confirmPassword: '' });
             } catch (error: any) {
@@ -1265,6 +1279,46 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
           case 'editProfile': return <EditProfileContent user={userSession} onSave={handleSaveProfile} isSaving={isSavingProfile} />;
           case 'changePassword': return <ChangePasswordContent />;
           case 'subAdmin': 
+            if (modalView === 'changePassword') {
+              return (
+                <View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>New Password</Text>
+                    <TextInput 
+                      style={styles.input} 
+                      value={passwordData.newPassword} 
+                      onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })} 
+                      placeholder="Enter new password" 
+                      secureTextEntry 
+                    />
+                  </View>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Confirm Password</Text>
+                    <TextInput 
+                      style={styles.input} 
+                      value={passwordData.confirmPassword} 
+                      onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })} 
+                      placeholder="Confirm new password" 
+                      secureTextEntry 
+                    />
+                  </View>
+                  <View style={styles.warningBox}>
+                    <Text style={styles.warningText}>
+                      ⚠️ Warning: Changing the password will immediately log out the sub-admin from all their active sessions.
+                    </Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={[styles.saveButton, styles.passwordButton, changingPassword && styles.saveButtonDisabled]} 
+                    onPress={handleChangePassword}
+                    disabled={changingPassword}
+                  >
+                    <Text style={styles.saveButtonText}>
+                      {changingPassword ? 'Changing Password...' : 'Change Password'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            }
             return modalView === 'list' ? 
               <SubAdminContent 
                 setModalView={setModalView} 
@@ -1330,6 +1384,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const getModalTitle = () => {
       if (modalContent === 'subAdmin') {
           if (modalView === 'list') return 'Sub-admin Management';
+          if (modalView === 'changePassword') return `Change Password - ${subAdminToChangePassword?.displayName}`;
           return editingAdmin ? 'Edit Sub-admin' : 'Add New Sub-admin';
       }
       if (modalContent === 'promocode') {
@@ -1425,64 +1480,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         </View>
       </Modal>
 
-      {/* Password Change Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={passwordModalVisible}
-        onRequestClose={() => setPasswordModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, {paddingBottom: insets.bottom}]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                Change Password - {subAdminToChangePassword?.displayName}
-              </Text>
-              <TouchableOpacity onPress={() => setPasswordModalVisible(false)}>
-                <X size={24} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView>
-              <View style={styles.modalForm}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>New Password</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    value={passwordData.newPassword} 
-                    onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })} 
-                    placeholder="Enter new password" 
-                    secureTextEntry 
-                  />
-                </View>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Confirm Password</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    value={passwordData.confirmPassword} 
-                    onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })} 
-                    placeholder="Confirm new password" 
-                    secureTextEntry 
-                  />
-                </View>
-                <View style={styles.warningBox}>
-                  <Text style={styles.warningText}>
-                    ⚠️ Warning: Changing the password will immediately log out the sub-admin from all their active sessions.
-                  </Text>
-                </View>
-                <TouchableOpacity 
-                  style={[styles.saveButton, styles.passwordButton, changingPassword && styles.saveButtonDisabled]} 
-                  onPress={handleChangePassword}
-                  disabled={changingPassword}
-                >
-                  <Text style={styles.saveButtonText}>
-                    {changingPassword ? 'Changing Password...' : 'Change Password'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+
 
     </View>
   );
@@ -1658,7 +1656,21 @@ const styles = StyleSheet.create({
   },
   subAdminActions: {
       flexDirection: 'row',
-      gap: 16,
+      gap: 12,
+  },
+  actionButton: {
+    backgroundColor: Colors.primaryLighter,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editButton: {
+    backgroundColor: Colors.primaryLighter,
+  },
+  deleteButton: {
+    backgroundColor: Colors.redLighter,
   },
   permissionTags: {
       flexDirection: 'row',
