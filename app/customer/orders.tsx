@@ -177,7 +177,7 @@ export default function OrdersScreen() {
       <View key={order.id} style={styles.orderCard}>
         <View style={styles.orderHeader}>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>#{order.id}</Text>
+                            <Text style={styles.orderId}>#{order.orderId || order.id}</Text>
             <Text style={styles.productName}>
               {firstItem ? `${firstItem.product.name} (x${firstItem.quantity})` : 'No items'}
             </Text>

@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, CheckCircle, MapPin, Package, Phone, Truck } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -134,7 +134,7 @@ export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScree
       <View key={order.id} style={styles.orderCard}>
         <View style={styles.orderHeader}>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>#{order.id}</Text>
+                            <Text style={styles.orderId}>#{order.orderId || order.id}</Text>
             <Text style={styles.customerName}>{order.customerName}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: `${statusColor}1A` }]}>

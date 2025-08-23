@@ -1,16 +1,16 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { ArrowLeft, Bell, ChevronRight, Edit, Lock, LogOut, Tag, Trash2, User, Users, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
-import { userService } from '../../core/services/userService';
+import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { PromocodeData, promocodeService } from '../../core/services/promocodeService';
 import { SubAdminData, SubAdminPermissions, subAdminService } from '../../core/services/subAdminService';
+import { userService } from '../../core/services/userService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -337,18 +337,19 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
     return (
         <View>
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Promocode *</Text>
+                <Text style={styles.inputLabel}>Promocode <Text style={styles.requiredAsterisk}>*</Text></Text>
                 <TextInput 
                     style={styles.input} 
                     value={formData.code} 
                     onChangeText={text => setFormData({...formData, code: text})} 
                     placeholder="Enter promocode (e.g., SAVE20)" 
+                    placeholderTextColor={Colors.textSecondary}
                     autoCapitalize="characters"
                 />
             </View>
             
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Discount Type *</Text>
+                <Text style={styles.inputLabel}>Discount Type <Text style={styles.requiredAsterisk}>*</Text></Text>
                 <View style={styles.radioGroup}>
                     <TouchableOpacity 
                         style={[styles.radioOption, formData.discountType === 'percentage' && styles.radioOptionSelected]}
@@ -366,12 +367,13 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
             </View>
 
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Discount Value *</Text>
+                <Text style={styles.inputLabel}>Discount Value <Text style={styles.requiredAsterisk}>*</Text></Text>
                 <TextInput 
                     style={styles.input} 
                     value={formData.discountValue} 
                     onChangeText={text => setFormData({...formData, discountValue: text})} 
                     placeholder={formData.discountType === 'percentage' ? "Enter percentage (e.g., 20)" : "Enter amount (e.g., 10)"}
+                    placeholderTextColor={Colors.textSecondary}
                     keyboardType="numeric"
                 />
             </View>
@@ -383,6 +385,7 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
                     value={formData.minOrderAmount} 
                     onChangeText={text => setFormData({...formData, minOrderAmount: text})} 
                     placeholder="Enter minimum order amount" 
+                    placeholderTextColor={Colors.textSecondary}
                     keyboardType="numeric"
                 />
             </View>
@@ -395,18 +398,20 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
                         value={formData.maxDiscount} 
                         onChangeText={text => setFormData({...formData, maxDiscount: text})} 
                         placeholder="Enter maximum discount amount" 
+                        placeholderTextColor={Colors.textSecondary}
                         keyboardType="numeric"
                     />
                 </View>
             )}
 
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Usage Limit *</Text>
+                <Text style={styles.inputLabel}>Usage Limit <Text style={styles.requiredAsterisk}>*</Text></Text>
                 <TextInput 
                     style={styles.input} 
                     value={formData.usageLimit} 
                     onChangeText={text => setFormData({...formData, usageLimit: text})} 
                     placeholder="Enter usage limit" 
+                    placeholderTextColor={Colors.textSecondary}
                     keyboardType="numeric"
                 />
             </View>
@@ -418,16 +423,18 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
                     value={formData.validFrom} 
                     onChangeText={text => setFormData({...formData, validFrom: text})} 
                     placeholder="YYYY-MM-DD"
+                    placeholderTextColor={Colors.textSecondary}
                 />
             </View>
 
             <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Valid Until *</Text>
+                <Text style={styles.inputLabel}>Valid Until <Text style={styles.requiredAsterisk}>*</Text></Text>
                 <TextInput 
                     style={styles.input} 
                     value={formData.validUntil} 
                     onChangeText={text => setFormData({...formData, validUntil: text})} 
                     placeholder="YYYY-MM-DD"
+                    placeholderTextColor={Colors.textSecondary}
                 />
             </View>
 
@@ -438,6 +445,7 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
                     value={formData.description} 
                     onChangeText={text => setFormData({...formData, description: text})} 
                     placeholder="Enter description (optional)" 
+                    placeholderTextColor={Colors.textSecondary}
                     multiline
                     numberOfLines={3}
                 />
@@ -1463,6 +1471,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_500Medium',
     color: Colors.text,
     marginBottom: 8,
+  },
+  requiredAsterisk: {
+    color: Colors.red,
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
   },
   input: {
     backgroundColor: Colors.background,

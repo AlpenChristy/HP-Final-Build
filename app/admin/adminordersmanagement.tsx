@@ -1,22 +1,14 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, Check, Plus, Search, Trash2, User, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { PanGestureHandler } from 'react-native-gesture-handler';
-import Animated, {
-    useAnimatedGestureHandler,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring
-} from 'react-native-reanimated';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { DeliveryAgent, deliveryAgentService } from '../../core/services/deliveryAgentService';
 import { OrderData, orderService } from '../../core/services/orderService';
 import { Product, getProducts } from '../../core/services/productService';
-import { router } from 'expo-router';
-import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 
 // Navigation type
 interface AdminOrdersScreenProps {
@@ -153,8 +145,8 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
     }
   };
 
-  // Swipeable Order Card Component
-  const SwipeableOrderCard = ({ 
+  // Order Card Component
+  const OrderCard = ({ 
     order, 
     isSelected, 
     onPress, 
@@ -167,48 +159,6 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
     onLongPress: () => void; 
     onDelete?: () => void; 
   }) => {
-    const translateX = useSharedValue(0);
-    const { width: screenWidth } = Dimensions.get('window');
-    const deleteWidth = 80;
-
-    const gestureHandler = useAnimatedGestureHandler({
-      onStart: (_, context: any) => {
-        context.startX = translateX.value;
-      },
-      onActive: (event, context) => {
-        const newTranslateX = context.startX + event.translationX;
-        // Only allow left swipe (negative values)
-        translateX.value = Math.min(0, Math.max(-deleteWidth, newTranslateX));
-      },
-      onEnd: (event) => {
-        if (event.translationX < -deleteWidth / 2) {
-          // Swipe threshold reached, show delete button
-          translateX.value = withSpring(-deleteWidth);
-        } else {
-          // Reset to original position
-          translateX.value = withSpring(0);
-        }
-      },
-    });
-
-    const animatedStyle = useAnimatedStyle(() => {
-      return {
-        transform: [{ translateX: translateX.value }],
-      };
-    });
-
-    const deleteButtonStyle = useAnimatedStyle(() => {
-      return {
-        transform: [{ translateX: translateX.value }],
-        opacity: translateX.value < -10 ? 1 : 0, // Only show when swiped
-      };
-    });
-
-    const handleDelete = () => {
-      translateX.value = withSpring(0);
-      onDelete?.();
-    };
-
     const firstItem = order.items[0];
     const orderDate = new Date(order.orderDate).toLocaleDateString('en-IN', {
       day: 'numeric',
@@ -217,59 +167,57 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
     });
 
     return (
-      <View style={styles.swipeableContainer}>
-        {/* Delete Button Background - Only show if onDelete is provided */}
-        {onDelete && (
-          <Animated.View style={[styles.deleteButton, deleteButtonStyle]}>
+      <View style={styles.orderCardContainer}>
+        <TouchableOpacity 
+          style={[
+            styles.orderCard, 
+            isSelected && styles.orderCardSelected, 
+            order.orderStatus === 'delivered' && styles.completedOrderCard
+          ]} 
+          onPress={onPress}
+          onLongPress={onLongPress}
+        >
+          {isSelected && <View style={styles.selectionIndicator}><Check size={14} color={Colors.white} /></View>}
+          
+          {/* Delete Button */}
+          {onDelete && (
             <TouchableOpacity 
-              style={styles.deleteButtonTouchable} 
-              onPress={handleDelete}
+              style={styles.deleteButton}
+              onPress={onDelete}
             >
-              <Trash2 size={24} color={Colors.white} />
+              <Trash2 size={16} color={Colors.red} />
             </TouchableOpacity>
-          </Animated.View>
-        )}
+          )}
+          
+          <View style={styles.orderHeader}>
+            <View>
+              <Text style={styles.orderId}>#{order.orderId || order.id}</Text>
+              <Text style={styles.orderDate}>{orderDate}</Text>
+            </View>
+          </View>
 
-        {/* Order Card */}
-        <PanGestureHandler onGestureEvent={onDelete ? gestureHandler : undefined}>
-          <Animated.View style={[styles.orderCardContainer, animatedStyle]}>
-            <TouchableOpacity 
-              style={[
-                styles.orderCard, 
-                isSelected && styles.orderCardSelected, 
-                order.orderStatus === 'delivered' && styles.completedOrderCard
-              ]} 
-              onPress={onPress}
-              onLongPress={onLongPress}
-            >
-              {isSelected && <View style={styles.selectionIndicator}><Check size={14} color={Colors.white} /></View>}
-              <View style={styles.orderHeader}>
-                <View>
-                  <Text style={styles.orderId}>#{order.id}</Text>
-                  <Text style={styles.orderDate}>{orderDate}</Text>
-                </View>
-                <Text style={styles.orderAmount}>₹{formatAmount(order.total)}</Text>
-              </View>
+          <View style={styles.customerInfo}>
+            <Text style={styles.productName}>
+              {firstItem ? `${firstItem.product.name} (x${firstItem.quantity})` : 'No items'}
+            </Text>
+            <Text style={styles.customerName}>{order.customerName}</Text>
+            <Text style={styles.customerAddress}>{order.deliveryAddress}</Text>
+          </View>
 
-              <View style={styles.customerInfo}>
-                <Text style={styles.productName}>
-                  {firstItem ? `${firstItem.product.name} (x${firstItem.quantity})` : 'No items'}
-                </Text>
-                <Text style={styles.customerName}>{order.customerName}</Text>
-                <Text style={styles.customerAddress}>{order.deliveryAddress}</Text>
-              </View>
+          <View style={styles.orderAmountContainer}>
+            <Text style={styles.orderAmountLabel}>Total Amount:</Text>
+            <Text style={styles.orderAmount}>₹{formatAmount(order.total)}</Text>
+          </View>
 
-              <View style={styles.footer}>
-                <Text style={[styles.deliveryPerson, { color: order.deliveryAgentName ? Colors.primary : Colors.textSecondary }]}>
-                  {order.deliveryAgentName ? `Assigned to: ${order.deliveryAgentName}` : 'Unassigned'}
-                </Text>
-                <Text style={[styles.statusText, { color: getStatusColor(order.orderStatus) }]}>
-                  {order.orderStatus.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </Animated.View>
-        </PanGestureHandler>
+          <View style={styles.footer}>
+            <Text style={[styles.deliveryPerson, { color: order.deliveryAgentName ? Colors.primary : Colors.textSecondary }]}>
+              {order.deliveryAgentName ? `Assigned to: ${order.deliveryAgentName}` : 'Unassigned'}
+            </Text>
+            <Text style={[styles.statusText, { color: getStatusColor(order.orderStatus) }]}>
+              {order.orderStatus.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -443,7 +391,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
         const isSelected = !!(order.id && selectedOrders.includes(order.id));
         
         return (
-          <SwipeableOrderCard
+          <OrderCard
             key={order.id}
             order={order}
             isSelected={isSelected}
@@ -575,7 +523,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                         {selectedOrder.id !== 'multiple' && (
                             <>
                             <View style={styles.modalSection}>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Order ID:</Text><Text style={styles.modalValue}>#{selectedOrder.id}</Text></View>
+                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Order ID:</Text><Text style={styles.modalValue}>#{selectedOrder.orderId || selectedOrder.id}</Text></View>
                                 <View style={styles.modalRow}>
                                   <Text style={styles.modalLabel}>Products:</Text>
                                   <View style={{flex: 1, alignItems: 'flex-end'}}>
@@ -607,6 +555,9 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                                 <Text style={styles.modalSectionTitle}>Customer Info</Text>
                                 <View style={styles.modalRow}><Text style={styles.modalLabel}>Name:</Text><Text style={styles.modalValue}>{selectedOrder.customerName}</Text></View>
                                 <View style={styles.modalRow}><Text style={styles.modalLabel}>Phone:</Text><Text style={styles.modalValue}>{selectedOrder.customerPhone}</Text></View>
+                                {selectedOrder.consumerNumber && (
+                                    <View style={styles.modalRow}><Text style={styles.modalLabel}>Consumer Number:</Text><Text style={styles.modalValue}>{selectedOrder.consumerNumber}</Text></View>
+                                )}
                                 <View style={styles.modalRow}><Text style={styles.modalLabel}>Address:</Text><Text style={[styles.modalValue, {textAlign: 'right', flex: 1}]}>{selectedOrder.deliveryAddress}</Text></View>
                             </View>
                             </>
@@ -940,6 +891,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 2,
     borderColor: 'transparent',
+    position: 'relative',
   },
   orderCardSelected: {
       borderColor: Colors.primary,
@@ -974,6 +926,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textSecondary,
     marginTop: 2,
+  },
+  orderAmountContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  orderAmountLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
   },
   orderAmount: {
     fontSize: 18,
@@ -1193,28 +1159,7 @@ const styles = StyleSheet.create({
       fontFamily: 'Inter_600SemiBold',
       fontSize: 16,
   },
-  // Swipeable styles
-  swipeableContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  deleteButton: {
-    position: 'absolute',
-    right: -80, // Position it outside the card initially
-    top: 0,
-    bottom: 0,
-    width: 80,
-    backgroundColor: Colors.red,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 16,
-  },
-  deleteButtonTouchable: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  // Order card container
   orderCardContainer: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
@@ -1223,6 +1168,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    marginBottom: 16,
+  },
+  // Delete button styles
+  deleteButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.red,
+    zIndex: 10,
   },
   // Current agent styles
   currentAgentRow: {

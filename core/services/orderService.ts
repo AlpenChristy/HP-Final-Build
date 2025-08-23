@@ -8,9 +8,11 @@ import { PromocodeData } from './promocodeService';
 // Order data interface
 export interface OrderData {
   id?: string;
+  orderId?: string; // Custom structured order ID
   userId: string;
   customerName: string;
   customerPhone: string;
+  consumerNumber?: string;
   deliveryAddress: string;
   items: CartItem[];
   subtotal: number;
@@ -35,6 +37,7 @@ export interface CreateOrderData {
   userId: string;
   customerName: string;
   customerPhone: string;
+  consumerNumber?: string;
   deliveryAddress: string;
   items: CartItem[];
   subtotal: number;
@@ -47,13 +50,60 @@ export interface CreateOrderData {
 }
 
 export const orderService = {
+  // Helper function to clean order data for Firebase
+  cleanOrderData(orderData: CreateOrderData): any {
+    const cleanedData = { ...orderData };
+    
+    // Clean appliedPromocode if it exists
+    if (cleanedData.appliedPromocode) {
+      const cleanedPromocode: any = {};
+      
+      // Only include defined values
+      if (cleanedData.appliedPromocode.code !== undefined) cleanedPromocode.code = cleanedData.appliedPromocode.code;
+      if (cleanedData.appliedPromocode.discountType !== undefined) cleanedPromocode.discountType = cleanedData.appliedPromocode.discountType;
+      if (cleanedData.appliedPromocode.discountValue !== undefined) cleanedPromocode.discountValue = cleanedData.appliedPromocode.discountValue;
+      if (cleanedData.appliedPromocode.usageLimit !== undefined) cleanedPromocode.usageLimit = cleanedData.appliedPromocode.usageLimit;
+      if (cleanedData.appliedPromocode.usedCount !== undefined) cleanedPromocode.usedCount = cleanedData.appliedPromocode.usedCount;
+      if (cleanedData.appliedPromocode.validFrom !== undefined) cleanedPromocode.validFrom = cleanedData.appliedPromocode.validFrom;
+      if (cleanedData.appliedPromocode.validUntil !== undefined) cleanedPromocode.validUntil = cleanedData.appliedPromocode.validUntil;
+      if (cleanedData.appliedPromocode.isActive !== undefined) cleanedPromocode.isActive = cleanedData.appliedPromocode.isActive;
+      if (cleanedData.appliedPromocode.description !== undefined) cleanedPromocode.description = cleanedData.appliedPromocode.description;
+      if (cleanedData.appliedPromocode.showOnHome !== undefined) cleanedPromocode.showOnHome = cleanedData.appliedPromocode.showOnHome;
+      if (cleanedData.appliedPromocode.minOrderAmount !== undefined) cleanedPromocode.minOrderAmount = cleanedData.appliedPromocode.minOrderAmount;
+      if (cleanedData.appliedPromocode.maxDiscount !== undefined) cleanedPromocode.maxDiscount = cleanedData.appliedPromocode.maxDiscount;
+      
+      cleanedData.appliedPromocode = cleanedPromocode;
+    }
+    
+    return cleanedData;
+  },
+
+  // Generate structured order ID
+  generateOrderId(): string {
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2); // Last 2 digits
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const seconds = now.getSeconds().toString().padStart(2, '0');
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    
+    return `ORD${year}${month}${day}${hours}${minutes}${seconds}${random}`;
+  },
+
   // Create a new order
   async createOrder(orderData: CreateOrderData): Promise<string> {
     try {
       const timestamp = Date.now();
+      const orderId = this.generateOrderId();
+      
+      // Clean the order data to remove undefined values
+      const cleanedOrderData = this.cleanOrderData(orderData);
       
       const orderDocument = {
-        ...orderData,
+        ...cleanedOrderData,
+        orderId: orderId, // Add custom order ID
         orderStatus: 'pending' as const,
         orderDate: timestamp,
         createdAt: timestamp,
@@ -65,8 +115,8 @@ export const orderService = {
       // Update stock levels for all products in the order (can go negative for backorders)
       await this.updateStockLevels(orderData.items);
       
-      console.log('Order created successfully with ID:', orderRef.id);
-      return orderRef.id;
+      console.log('Order created successfully with ID:', orderId);
+      return orderId; // Return custom order ID instead of Firebase ID
     } catch (error) {
       console.error('Error creating order:', error);
       throw error;
@@ -125,7 +175,7 @@ export const orderService = {
     }
   },
 
-  // Get order by ID
+  // Get order by ID (Firebase document ID)
   async getOrderById(orderId: string): Promise<OrderData | null> {
     try {
       const orderRef = doc(FIREBASE_DB, 'orders', orderId);
@@ -144,13 +194,48 @@ export const orderService = {
     }
   },
 
+  // Get order by custom order ID
+  async getOrderByCustomId(customOrderId: string): Promise<OrderData | null> {
+    try {
+      const q = query(
+        collection(FIREBASE_DB, 'orders'),
+        where('orderId', '==', customOrderId)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        return {
+          id: doc.id,
+          ...doc.data()
+        } as OrderData;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting order by custom ID:', error);
+      return null;
+    }
+  },
+
   // Update order status
   async updateOrderStatus(orderId: string, status: OrderData['orderStatus']): Promise<void> {
     try {
-      const orderRef = doc(FIREBASE_DB, 'orders', orderId);
+      // Try to get order by custom ID first, then fallback to Firebase ID
+      let currentOrder = await this.getOrderByCustomId(orderId);
+      let orderRef;
       
-      // Get the current order to check if we need to restore stock
-      const currentOrder = await this.getOrderById(orderId);
+      if (currentOrder) {
+        orderRef = doc(FIREBASE_DB, 'orders', currentOrder.id!);
+      } else {
+        // Fallback to Firebase document ID for backward compatibility
+        currentOrder = await this.getOrderById(orderId);
+        if (currentOrder) {
+          orderRef = doc(FIREBASE_DB, 'orders', orderId);
+        } else {
+          throw new Error('Order not found');
+        }
+      }
       
       await updateDoc(orderRef, {
         orderStatus: status,
@@ -365,7 +450,17 @@ export const orderService = {
   // Delete order
   async deleteOrder(orderId: string): Promise<void> {
     try {
-      const orderRef = doc(FIREBASE_DB, 'orders', orderId);
+      // Try to get order by custom ID first, then fallback to Firebase ID
+      let currentOrder = await this.getOrderByCustomId(orderId);
+      let orderRef;
+      
+      if (currentOrder) {
+        orderRef = doc(FIREBASE_DB, 'orders', currentOrder.id!);
+      } else {
+        // Fallback to Firebase document ID for backward compatibility
+        orderRef = doc(FIREBASE_DB, 'orders', orderId);
+      }
+      
       await deleteDoc(orderRef);
       console.log('Order deleted successfully:', orderId);
     } catch (error) {

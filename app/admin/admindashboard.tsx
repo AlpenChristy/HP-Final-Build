@@ -2,8 +2,8 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AlertTriangle, CheckCircle, Minus, Package, Plus, Truck } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { getProducts, Product, updateProduct } from '../../core/services/productService';
@@ -29,6 +29,7 @@ export default function AdminDashboardScreen() {
   const { userSession } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingQuantities, setEditingQuantities] = useState<{ [key: string]: string }>({});
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
@@ -81,6 +82,49 @@ export default function AdminDashboardScreen() {
     } else {
       Alert.alert('Warning', 'Stock is already at 0');
     }
+  };
+
+  const handleDirectStockUpdate = (product: Product, newQuantity: string) => {
+    const quantity = parseInt(newQuantity);
+    if (isNaN(quantity) || quantity < 0) {
+      Alert.alert('Invalid Input', 'Please enter a valid positive number');
+      return;
+    }
+    handleUpdateStock(product, quantity);
+  };
+
+  const handleQuantityChange = (productId: string, value: string) => {
+    setEditingQuantities(prev => ({
+      ...prev,
+      [productId]: value
+    }));
+  };
+
+  const handleQuantitySubmit = (product: Product) => {
+    const editingValue = editingQuantities[product.id!];
+    if (editingValue !== undefined) {
+      const quantity = parseInt(editingValue);
+      if (isNaN(quantity) || quantity < 0) {
+        Alert.alert('Invalid Input', 'Please enter a valid positive number');
+        // Reset to original value
+        setEditingQuantities(prev => ({
+          ...prev,
+          [product.id!]: (product.quantity || 0).toString()
+        }));
+        return;
+      }
+      handleUpdateStock(product, quantity);
+    }
+    // Clear editing state
+    setEditingQuantities(prev => {
+      const newState = { ...prev };
+      delete newState[product.id!];
+      return newState;
+    });
+  };
+
+  const handleQuantityBlur = (product: Product) => {
+    handleQuantitySubmit(product);
   };
 
   // Calculate stock recommendations
@@ -225,7 +269,19 @@ export default function AdminDashboardScreen() {
                     </Text>
                   </View>
                   <View style={styles.stockControls}>
-                    <Text style={styles.stockQuantity}>{product.quantity || 0}</Text>
+                    <TextInput
+                      style={styles.stockInput}
+                      value={editingQuantities[product.id!] !== undefined 
+                        ? editingQuantities[product.id!] 
+                        : (product.quantity || 0).toString()
+                      }
+                      onChangeText={(text) => handleQuantityChange(product.id!, text)}
+                      onBlur={() => handleQuantityBlur(product)}
+                      onSubmitEditing={() => handleQuantitySubmit(product)}
+                      keyboardType="numeric"
+                      placeholder="0"
+                      placeholderTextColor={Colors.textSecondary}
+                    />
                     <View style={styles.stockButtons}>
                       <TouchableOpacity 
                         style={styles.stockButton}
@@ -404,11 +460,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     minWidth: 80,
   },
-  stockQuantity: {
+  stockInput: {
     fontSize: 20,
     fontFamily: 'Inter_700Bold',
     color: Colors.text,
     marginBottom: 10,
+    textAlign: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minWidth: 60,
   },
   stockButtons: {
     flexDirection: 'row',

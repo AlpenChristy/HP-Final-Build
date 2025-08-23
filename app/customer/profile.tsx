@@ -1,16 +1,17 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
+import { updateEmail } from 'firebase/auth';
 import { ArrowLeft, Bell, ChevronRight, Edit, HelpCircle, Lock, LogOut, Mail, MapPin, Phone, Tag, Trash2, Truck, User, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useAddress } from '../../core/context/AddressContext';
+import { useConsumerNumber } from '../../core/context/ConsumerNumberContext';
+import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
-import { updateEmail } from 'firebase/auth';
-import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -30,14 +31,16 @@ const Colors = {
 };
 
 // --- Modal Content Components ---
-const PersonalInfoContent = ({ user, onSave, isSaving }: { user: any, onSave: (name: string, email: string) => void, isSaving: boolean }) => {
+const PersonalInfoContent = ({ user, onSave, isSaving }: { user: any, onSave: (name: string, email: string, consumerNumber: string) => void, isSaving: boolean }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [name, setName] = useState<string>(user?.name || '');
     const [email, setEmail] = useState<string>(user?.email || '');
+    const [consumerNumber, setConsumerNumber] = useState<string>(user?.consumerNumber || '');
 
     useEffect(() => {
         setName(user?.name || '');
         setEmail(user?.email || '');
+        setConsumerNumber(user?.consumerNumber || '');
     }, [user]);
 
     const handlePress = () => {
@@ -46,7 +49,7 @@ const PersonalInfoContent = ({ user, onSave, isSaving }: { user: any, onSave: (n
             return;
         }
         // Save
-        onSave(name.trim(), email.trim());
+        onSave(name.trim(), email.trim(), consumerNumber.trim());
     };
 
     return (
@@ -67,7 +70,19 @@ const PersonalInfoContent = ({ user, onSave, isSaving }: { user: any, onSave: (n
             </View>
             <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Consumer Number</Text>
-                <Text style={styles.infoValue}>{user?.consumerNumber}</Text>
+                {isEditing ? (
+                    <TextInput
+                        style={styles.input}
+                        value={consumerNumber}
+                        onChangeText={setConsumerNumber}
+                        placeholder="Enter your consumer number"
+                        keyboardType="numeric"
+                        maxLength={20}
+                        editable={!isSaving}
+                    />
+                ) : (
+                    <Text style={styles.infoValue}>{user?.consumerNumber || 'Not set'}</Text>
+                )}
             </View>
             <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Registered Mobile</Text>
@@ -156,7 +171,11 @@ const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
         <View>
             {sharedAddress ? (
                 <View style={styles.addressCard}>
-                    <MapPin size={20} color={Colors.primary} />
+                    <View style={styles.addressHeader}>
+                        <MapPin size={20} color={Colors.primary} />
+                        <Text style={styles.addressLabel}>Delivery Address</Text>
+                    </View>
+                    
                     {isEditing ? (
                         <View style={styles.addressEditContainer}>
                             <TextInput
@@ -164,49 +183,60 @@ const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
                                 value={localAddress}
                                 onChangeText={setLocalAddress}
                                 placeholder="Enter your delivery address"
+                                placeholderTextColor={Colors.textSecondary}
                                 multiline
                                 numberOfLines={4}
                                 textAlignVertical="top"
                                 autoFocus={true}
                             />
-                        </View>
-                    ) : (
-                        <Text style={styles.addressText}>{sharedAddress}</Text>
-                    )}
-                    <View style={styles.addressActions}>
-                        {isEditing ? (
-                            <>
+                            <View style={styles.addressInputActions}>
                                 <TouchableOpacity 
+                                    style={styles.cancelButton}
+                                    onPress={() => {
+                                        setIsEditing(false);
+                                        setLocalAddress(sharedAddress || '');
+                                    }}
+                                >
+                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.saveButton, !localAddress.trim() && { opacity: 0.6 }]}
                                     onPress={handleSaveAddress}
-                                    disabled={isSaving}
+                                    disabled={!localAddress.trim() || isSaving}
                                 >
                                     <Text style={styles.saveButtonText}>
                                         {isSaving ? 'Saving...' : 'Save'}
                                     </Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity onPress={() => {
-                                    setIsEditing(false);
-                                    setLocalAddress(sharedAddress || '');
-                                }}>
-                                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </View>
+                        </View>
+                    ) : (
+                        <>
+                            <Text style={styles.addressText}>{sharedAddress}</Text>
+                            <View style={styles.addressActions}>
+                                <TouchableOpacity 
+                                    style={styles.actionButton}
+                                    onPress={() => setIsEditing(true)}
+                                >
+                                    <Edit size={16} color={Colors.primary} />
+                                    <Text style={styles.actionButtonText}>Edit</Text>
                                 </TouchableOpacity>
-                            </>
-                        ) : (
-                            <>
-                                <TouchableOpacity onPress={() => setIsEditing(true)}>
-                                    <Edit size={18} color={Colors.textSecondary} />
+                                <TouchableOpacity 
+                                    style={[styles.actionButton, styles.deleteButton]}
+                                    onPress={handleDeleteAddress}
+                                >
+                                    <Trash2 size={16} color={Colors.red} />
+                                    <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity onPress={handleDeleteAddress}>
-                                    <Trash2 size={18} color={Colors.red} />
-                                </TouchableOpacity>
-                            </>
-                        )}
-                    </View>
+                            </View>
+                        </>
+                    )}
                 </View>
             ) : (
                 <View style={styles.emptyAddressCard}>
-                    <MapPin size={24} color={Colors.textSecondary} />
+                    <MapPin size={32} color={Colors.textSecondary} />
                     <Text style={styles.emptyAddressText}>No address added</Text>
+                    <Text style={styles.emptyAddressSubtext}>Add your delivery address to receive orders</Text>
                     <TouchableOpacity 
                         style={styles.addAddressButton}
                         onPress={() => setIsEditing(true)}
@@ -218,11 +248,13 @@ const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
             
             {isEditing && !sharedAddress && (
                 <View style={styles.addressInputContainer}>
+                    <Text style={styles.inputLabel}>Add Delivery Address</Text>
                     <TextInput
                         style={styles.addressInput}
                         value={localAddress}
                         onChangeText={setLocalAddress}
                         placeholder="Enter your delivery address"
+                        placeholderTextColor={Colors.textSecondary}
                         multiline
                         numberOfLines={4}
                         textAlignVertical="top"
@@ -241,7 +273,7 @@ const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
                             disabled={!localAddress.trim() || isSaving}
                         >
                             <Text style={styles.saveButtonText}>
-                                {isSaving ? 'Saving...' : 'Save Address'}
+                                {isSaving ? 'Saving...' : 'Save'}
                             </Text>
                         </TouchableOpacity>
                     </View>
@@ -388,6 +420,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { userSession, logout, login } = useAuth();
   const { address, updateAddress, isLoading: addressLoading } = useAddress();
+  const { consumerNumber, updateConsumerNumber, isLoading: consumerNumberLoading } = useConsumerNumber();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -458,6 +491,15 @@ export default function ProfileScreen() {
     loadNotifications();
   }, [userSession?.uid]);
 
+  // Refresh data when component mounts to ensure latest data
+  useEffect(() => {
+    if (userSession?.uid) {
+      refreshUserData();
+    }
+  }, []);
+
+
+
   const handleLogout = async () => {
     Alert.alert(
       'Logout',
@@ -490,11 +532,18 @@ export default function ProfileScreen() {
     // No need to manually update userData as it will be refreshed
   };
 
+  // Refresh user data manually
+  const refreshUserData = () => {
+    if (userSession?.uid) {
+      loadUserDataAndStats();
+    }
+  };
+
   // Create user object from session data and database data for compatibility
   const user = userSession ? {
     uid: userSession.uid,
     name: userData?.displayName || userSession.displayName || 'User',
-    consumerNumber: 'HP123456789', // This should come from your user profile data
+    consumerNumber: consumerNumber, // Use context consumer number
     mobile: userData?.phoneNumber || '+91 98765 43210', // This should come from your user profile data
     email: userSession.email,
     address: address // This comes from shared context
@@ -511,7 +560,7 @@ export default function ProfileScreen() {
 
   const [isSavingPersonal, setIsSavingPersonal] = useState(false);
 
-  const handleSavePersonalInfo = async (name: string, email: string) => {
+  const handleSavePersonalInfo = async (name: string, email: string, consumerNumber: string) => {
     if (!userSession?.uid) return;
 
     // Simple validations
@@ -528,9 +577,17 @@ export default function ProfileScreen() {
     setIsSavingPersonal(true);
     try {
       // 1) Update in Firestore
-      await userService.updateUser(userSession.uid, { displayName: name, email });
+      await userService.updateUser(userSession.uid, { 
+        displayName: name, 
+        email
+      });
 
-      // 2) Try to update Firebase Auth email as well (might require recent login)
+      // 2) Update consumer number using context (if changed)
+      if (consumerNumber !== user?.consumerNumber) {
+        await updateConsumerNumber(consumerNumber);
+      }
+
+      // 3) Try to update Firebase Auth email as well (might require recent login)
       const currentUser = FIREBASE_AUTH.currentUser;
       if (currentUser && currentUser.email !== email) {
         try {
@@ -540,11 +597,14 @@ export default function ProfileScreen() {
         }
       }
 
-      // 3) Refresh local session
+      // 4) Refresh local session
       await login({ ...userSession, displayName: name, email });
 
-      // 4) Update local screen state
+      // 5) Update local screen state
       setUserData(prev => prev ? { ...prev, displayName: name, email } : prev);
+
+      // 6) Refresh user data to ensure consistency
+      refreshUserData();
 
       setModalVisible(false);
       Alert.alert('Success', 'Profile updated successfully.');
@@ -564,7 +624,7 @@ export default function ProfileScreen() {
     { id: '5', title: 'Help & Support', icon: HelpCircle, action: () => openModal('help') },
   ];
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || consumerNumberLoading) {
     return <View style={styles.loadingContainer} />;
   }
 
@@ -603,7 +663,10 @@ export default function ProfileScreen() {
         
         <View style={styles.profileSection}>
           <Text style={styles.headerTitleText}>Profile</Text>
-          <Text style={styles.userDetails}>{user?.name}: {user?.consumerNumber}</Text>
+          <Text style={styles.userDetails}>
+            {user?.name}
+            {user?.consumerNumber && `: ${user.consumerNumber}`}
+          </Text>
         </View>
       </View>
 
@@ -888,13 +951,21 @@ const styles = StyleSheet.create({
       fontSize: 16,
   },
   addressCard: {
-      backgroundColor: Colors.background,
+      backgroundColor: Colors.white,
       borderRadius: 12,
       padding: 16,
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 12,
       marginBottom: 16,
+  },
+  addressHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+      gap: 8,
+  },
+  addressLabel: {
+      fontSize: 16,
+      fontFamily: 'Inter_600SemiBold',
+      color: Colors.text,
   },
   addressText: {
       flex: 1,
@@ -906,6 +977,27 @@ const styles = StyleSheet.create({
   addressActions: {
       flexDirection: 'row',
       gap: 16,
+      marginTop: 12,
+  },
+  actionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      backgroundColor: Colors.background,
+  },
+  actionButtonText: {
+      fontSize: 14,
+      fontFamily: 'Inter_500Medium',
+      color: Colors.primary,
+  },
+  deleteButton: {
+      backgroundColor: Colors.redLighter,
+  },
+  deleteButtonText: {
+      color: Colors.red,
   },
   addButton: {
       backgroundColor: Colors.primary,
@@ -1015,7 +1107,14 @@ const styles = StyleSheet.create({
       fontFamily: 'Inter_500Medium',
       color: Colors.textSecondary,
       marginTop: 12,
-      marginBottom: 16,
+      marginBottom: 8,
+  },
+  emptyAddressSubtext: {
+      fontSize: 14,
+      fontFamily: 'Inter_400Regular',
+      color: Colors.textSecondary,
+      textAlign: 'center',
+      marginBottom: 20,
   },
   addAddressButton: {
       backgroundColor: Colors.primary,
@@ -1034,6 +1133,12 @@ const styles = StyleSheet.create({
       padding: 16,
       marginBottom: 16,
       marginTop: 8,
+  },
+  inputLabel: {
+      fontSize: 16,
+      fontFamily: 'Inter_600SemiBold',
+      color: Colors.text,
+      marginBottom: 12,
   },
   addressInputActions: {
       flexDirection: 'row',
@@ -1062,10 +1167,15 @@ const styles = StyleSheet.create({
       borderRadius: 8,
       backgroundColor: Colors.primary,
       alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
   },
   saveButtonText: {
       color: Colors.white,
-      fontFamily: 'Inter_500Medium',
+      fontFamily: 'Inter_600SemiBold',
       fontSize: 14,
   },
   loadingContainer: {
@@ -1094,4 +1204,5 @@ const styles = StyleSheet.create({
       color: Colors.textSecondary,
       textAlign: 'center',
   },
+
 });

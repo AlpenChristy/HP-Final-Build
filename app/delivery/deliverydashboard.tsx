@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CheckCircle, Clock, Package, BarChart2 as TrendingUp } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -93,7 +93,7 @@ export default function DeliverySummaryScreen() {
       console.log('Today completed orders for total value:', todayCompletedOrders.length);
       
       const earnings = todayCompletedOrders.reduce((total, order) => {
-        console.log(`Today's Order ${order.id}: Total value ₹${order.total}`);
+        console.log(`Today's Order ${order.orderId || order.id}: Total value ₹${order.total}`);
         return total + order.total;
       }, 0);
       
@@ -112,7 +112,7 @@ export default function DeliverySummaryScreen() {
         .sort((a, b) => (b.deliveredAt || b.createdAt) - (a.deliveredAt || a.createdAt))
         .slice(0, 5)
         .map(order => ({
-          id: order.id,
+          id: order.orderId || order.id,
           customer: order.customerName,
           time: new Date(order.deliveredAt || order.createdAt).toLocaleTimeString('en-US', { 
             hour: 'numeric', 

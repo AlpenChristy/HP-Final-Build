@@ -10,6 +10,7 @@ export interface UserData {
   role: string;
   phoneNumber?: string;
   address?: string;
+  consumerNumber?: string;
   createdAt: number;
   updatedAt: number;
 }

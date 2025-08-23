@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
-import { ArrowLeft, CheckCircle, Minus, Plus, Tag, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { ArrowLeft, CheckCircle, Minus, MousePointer, Plus, Tag, X } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import { Image, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../core/context/CartContext';
@@ -180,6 +180,45 @@ export default function CartScreen() {
     setPromocodeError('');
   };
 
+  const handleApplyPromocodeFromList = async (promocode: PromocodeData) => {
+    setIsLoadingPromocode(true);
+    setPromocodeError('');
+    
+    try {
+      const subtotal = getCartTotal();
+      const validation = await promocodeService.validatePromocode(promocode.code, subtotal);
+      
+      if (validation.valid && validation.promocode) {
+        // Calculate discount based on promocode type
+        let calculatedDiscount = 0;
+        if (validation.promocode.discountType === 'percentage') {
+          calculatedDiscount = (subtotal * validation.promocode.discountValue) / 100;
+          // Apply maximum discount if set
+          if (validation.promocode.maxDiscount && calculatedDiscount > validation.promocode.maxDiscount) {
+            calculatedDiscount = validation.promocode.maxDiscount;
+          }
+        } else {
+          calculatedDiscount = validation.promocode.discountValue;
+        }
+        
+        setDiscount(calculatedDiscount);
+        setAppliedPromocode(validation.promocode);
+        setPromoCode(validation.promocode.code); // Update the input field
+        setPromocodeError('');
+        setShowAvailablePromocodes(false); // Hide the list after applying
+      } else {
+        clearPromocode();
+        setPromocodeError(validation.error || 'Invalid promo code');
+      }
+    } catch (error) {
+      console.error('Error applying promocode from list:', error);
+      clearPromocode();
+      setPromocodeError('Error applying promo code. Please try again.');
+    } finally {
+      setIsLoadingPromocode(false);
+    }
+  };
+
   const calculateSubtotal = () => {
       return getCartTotal();
   };
@@ -298,7 +337,11 @@ export default function CartScreen() {
                     {showAvailablePromocodes && (
                         <View style={styles.promocodesList}>
                             {availablePromocodes.map((promocode) => (
-                                <View key={promocode.id} style={styles.promocodeItem}>
+                                <TouchableOpacity 
+                                    key={promocode.id} 
+                                    style={styles.promocodeItem}
+                                    onPress={() => handleApplyPromocodeFromList(promocode)}
+                                >
                                     <View style={styles.promocodeHeader}>
                                         <Text style={styles.promocodeCode}>{promocode.code}</Text>
                                         <Text style={styles.promocodeDiscount}>
@@ -316,7 +359,11 @@ export default function CartScreen() {
                                             Min. order: ₹{promocode.minOrderAmount}
                                         </Text>
                                     )}
-                                </View>
+                                    <View style={styles.promocodeAction}>
+                                        <MousePointer size={12} color={Colors.primary} />
+                                        <Text style={styles.promocodeActionText}>Tap to apply</Text>
+                                    </View>
+                                </TouchableOpacity>
                             ))}
                         </View>
                     )}
@@ -567,6 +614,12 @@ const styles = StyleSheet.create({
       padding: 12,
       borderLeftWidth: 3,
       borderLeftColor: Colors.primary,
+      // Add subtle shadow for better touch feedback
+      shadowColor: Colors.primary,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
   },
   promocodeHeader: {
       flexDirection: 'row',
@@ -595,6 +648,17 @@ const styles = StyleSheet.create({
       fontFamily: 'Inter_400Regular',
       color: Colors.textSecondary,
       fontStyle: 'italic',
+  },
+  promocodeAction: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 6,
+  },
+  promocodeActionText: {
+      fontSize: 11,
+      fontFamily: 'Inter_500Medium',
+      color: Colors.primary,
   },
   billCard: {
     backgroundColor: Colors.surface,

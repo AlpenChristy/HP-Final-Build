@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { AuthProvider } from '../core/auth/AuthContext';
 import { CartProvider } from "../core/context/CartContext";
 import { AddressProvider } from "../core/context/AddressContext";
+import { ConsumerNumberProvider } from "../core/context/ConsumerNumberContext";
 import '../global.css';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -11,13 +12,15 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <CartProvider>
           <AddressProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="auth/auth" />
-              <Stack.Screen name="customer" options={{ headerShown: false }} />
-              <Stack.Screen name="admin" options={{ headerShown: false }} />
-              <Stack.Screen name="delivery" options={{ headerShown: false }} />
-            </Stack>
+            <ConsumerNumberProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="auth/auth" />
+                <Stack.Screen name="customer" options={{ headerShown: false }} />
+                <Stack.Screen name="admin" options={{ headerShown: false }} />
+                <Stack.Screen name="delivery" options={{ headerShown: false }} />
+              </Stack>
+            </ConsumerNumberProvider>
           </AddressProvider>
         </CartProvider>
       </GestureHandlerRootView>

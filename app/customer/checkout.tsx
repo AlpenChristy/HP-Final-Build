@@ -1,12 +1,13 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
-import { ArrowLeft, MapPin } from 'lucide-react-native';
-import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Hash, MapPin } from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useAddress } from '../../core/context/AddressContext';
 import { useCart } from '../../core/context/CartContext';
+import { useConsumerNumber } from '../../core/context/ConsumerNumberContext';
 import { CreateOrderData, orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
 
@@ -29,6 +30,7 @@ export default function CheckoutScreen() {
   const { cartItems, getCartTotal, appliedPromocode, discount, clearCart } = useCart();
   const { userSession } = useAuth();
   const { address: deliveryAddress, updateAddress, isLoading: addressLoading } = useAddress();
+  const { consumerNumber, updateConsumerNumber, isLoading: consumerNumberLoading } = useConsumerNumber();
   
   // State for user data
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -39,6 +41,9 @@ export default function CheckoutScreen() {
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [newAddress, setNewAddress] = useState('');
   const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [showConsumerNumberModal, setShowConsumerNumberModal] = useState(false);
+  const [newConsumerNumber, setNewConsumerNumber] = useState('');
+  const [isSavingConsumerNumber, setIsSavingConsumerNumber] = useState(false);
   // Suppress empty-cart alert when we purposely cleared cart after placing order
   const suppressEmptyCartAlert = useRef(false);
 
@@ -59,26 +64,26 @@ export default function CheckoutScreen() {
     }
   }, [cartItems]);
 
-  // Load user data
+  // Load user data (for other user info like name, email, etc.)
+  const loadUserData = async () => {
+    if (!userSession?.uid) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const user = await userService.getUserById(userSession.uid);
+      if (user) {
+        setUserData(user);
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadUserData = async () => {
-      if (!userSession?.uid) {
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const user = await userService.getUserById(userSession.uid);
-        if (user) {
-          setUserData(user);
-        }
-      } catch (error) {
-        console.error('Error loading user data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadUserData();
   }, [userSession?.uid]);
 
@@ -118,6 +123,36 @@ export default function CheckoutScreen() {
     }
   };
 
+  // Handle change consumer number
+  const handleChangeConsumerNumber = () => {
+    setNewConsumerNumber(consumerNumber || '');
+    setShowConsumerNumberModal(true);
+  };
+
+  // Handle add new consumer number (when no consumer number exists)
+  const handleAddConsumerNumber = () => {
+    setNewConsumerNumber('');
+    setShowConsumerNumberModal(true);
+  };
+
+  // Handle save consumer number
+  const handleSaveConsumerNumber = async () => {
+    if (!newConsumerNumber.trim()) return;
+
+    setIsSavingConsumerNumber(true);
+    try {
+      // Update consumer number using shared context (automatically syncs with profile)
+      await updateConsumerNumber(newConsumerNumber.trim());
+      setShowConsumerNumberModal(false);
+      Alert.alert('Success', 'Consumer number updated successfully!');
+    } catch (error) {
+      console.error('Error saving consumer number:', error);
+      Alert.alert('Error', 'Failed to save consumer number. Please try again.');
+    } finally {
+      setIsSavingConsumerNumber(false);
+    }
+  };
+
   // Handle place order
   const handlePlaceOrder = async () => {
     if (!userSession?.uid || !userData) {
@@ -142,6 +177,7 @@ export default function CheckoutScreen() {
         userId: userSession.uid,
         customerName: userData.displayName,
         customerPhone: userData.phoneNumber || '',
+        consumerNumber: consumerNumber || '',
         deliveryAddress: deliveryAddress.trim(),
         items: cartItems,
         subtotal,
@@ -158,16 +194,11 @@ export default function CheckoutScreen() {
       // Clear cart after successful order
       await clearCart();
       
-      Alert.alert(
-        'Order Placed Successfully!',
-        `Your order #${orderId} has been confirmed and is being processed.\n\nWe'll deliver your order within 24 hours.\n\nYou'll receive updates on your order status.\n\nPayment: Cash on Delivery`,
-        [
-          {
-            text: 'View Order Details',
-            onPress: () => router.push(`/customer/ordercomplete?orderId=${orderId}`)
-          }
-        ]
-      );
+      // Keep loading state for a brief moment to show "Placing Order..." feedback
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Directly navigate to order complete screen without showing alert
+      router.push(`/customer/ordercomplete?orderId=${orderId}`);
     } catch (error) {
       console.error('Error placing order:', error);
       Alert.alert('Error', 'Failed to place order. Please try again.');
@@ -176,7 +207,7 @@ export default function CheckoutScreen() {
     }
   };
 
-  if (!fontsLoaded || isLoading || addressLoading) {
+  if (!fontsLoaded || isLoading || addressLoading || consumerNumberLoading) {
     return <View style={styles.loadingContainer} />;
   }
 
@@ -213,6 +244,28 @@ export default function CheckoutScreen() {
                     <Text style={styles.addressText}>No address added</Text>
                     <TouchableOpacity onPress={handleAddAddress}>
                         <Text style={styles.changeButtonText}>Add Address</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+        </View>
+
+        {/* Consumer Number */}
+        <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Consumer Number (Optional)</Text>
+            {consumerNumber ? (
+                <View style={styles.addressCard}>
+                    <Hash size={24} color={Colors.primary} />
+                    <Text style={styles.addressText}>{consumerNumber}</Text>
+                    <TouchableOpacity onPress={handleChangeConsumerNumber}>
+                        <Text style={styles.changeButtonText}>Change</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <View style={styles.addressCard}>
+                    <Hash size={24} color={Colors.textSecondary} />
+                    <Text style={styles.addressText}>Add consumer number</Text>
+                    <TouchableOpacity onPress={handleAddConsumerNumber}>
+                        <Text style={styles.changeButtonText}>Add</Text>
                     </TouchableOpacity>
                 </View>
             )}
@@ -322,8 +375,64 @@ export default function CheckoutScreen() {
                 disabled={!newAddress.trim() || isSavingAddress}
               >
                 <Text style={styles.modalSaveButtonText}>
-                  {isSavingAddress ? 'Saving...' : (deliveryAddress ? 'Update Address' : 'Save Address')}
+                  {isSavingAddress ? 'Saving...' : (deliveryAddress ? 'Update' : 'Save')}
                 </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Consumer Number Modal */}
+      <Modal
+        visible={showConsumerNumberModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowConsumerNumberModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {consumerNumber ? 'Change Consumer Number' : 'Add Consumer Number'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowConsumerNumberModal(false)}>
+                <Text style={styles.modalCloseButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Consumer Number</Text>
+              <TextInput
+                style={styles.consumerNumberInput}
+                placeholder="Enter your consumer number"
+                placeholderTextColor={Colors.textSecondary}
+                value={newConsumerNumber}
+                onChangeText={setNewConsumerNumber}
+                keyboardType="numeric"
+                maxLength={20}
+              />
+              <Text style={styles.inputHelpText}>
+                This is your gas connection number for delivery purposes
+              </Text>
+            </View>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.modalCancelButton}
+                onPress={() => setShowConsumerNumberModal(false)}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalSaveButton, (!newConsumerNumber.trim() || isSavingConsumerNumber) && { opacity: 0.6 }]}
+                onPress={handleSaveConsumerNumber}
+                disabled={!newConsumerNumber.trim() || isSavingConsumerNumber}
+              >
+                            <Text style={styles.modalSaveButtonText}>
+              {isSavingConsumerNumber ? 'Saving...' : (consumerNumber ? 'Update' : 'Save')}
+            </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -561,6 +670,32 @@ const styles = StyleSheet.create({
     color: Colors.text,
     minHeight: 100,
     marginBottom: 20,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  consumerNumberInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+    height: 50,
+    marginBottom: 8,
+  },
+  inputHelpText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    lineHeight: 16,
   },
   modalButtons: {
     flexDirection: 'row',

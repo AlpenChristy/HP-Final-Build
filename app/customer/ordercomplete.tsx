@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, Clock, Hash, MapPin, Phone, ShoppingBag, Truck, Wallet, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { orderService } from '../../core/services/orderService';
@@ -18,14 +18,18 @@ const Colors = {
   border: '#EAECEF',
   white: '#FFFFFF',
   green: '#16A34A',
+  greenLighter: '#F0FDF4',
+  yellow: '#F59E0B',
+  yellowLighter: '#FFFBEB',
 };
 
 // --- Order Data Interface ---
 interface OrderCompleteData {
-    id: string;
+    id: string | undefined;
     total: number;
     paymentMode: string;
     address: string;
+    consumerNumber?: string;
     items?: any[];
     subtotal?: number;
     deliveryCharge?: number;
@@ -50,13 +54,22 @@ export default function OrderPlacedScreen() {
       try {
         // Check if order ID is passed as parameter
         if (params.orderId) {
-          const order = await orderService.getOrderById(params.orderId as string);
+          console.log('Loading order with ID:', params.orderId);
+          // Try to get order by custom ID first, then fallback to Firebase ID
+          let order = await orderService.getOrderByCustomId(params.orderId as string);
+          if (!order) {
+            console.log('Order not found by custom ID, trying Firebase ID');
+            // Fallback to Firebase document ID for backward compatibility
+            order = await orderService.getOrderById(params.orderId as string);
+          }
           if (order) {
+            console.log('Order found:', order);
             setOrderData({
-              id: order.id,
+              id: order.orderId || order.id,
               total: order.total,
               paymentMode: order.paymentMethod === 'cod' ? 'Cash on Delivery' : order.paymentMethod,
               address: order.deliveryAddress,
+              consumerNumber: order.consumerNumber,
               items: order.items,
               subtotal: order.subtotal,
               deliveryCharge: order.deliveryCharge,
@@ -117,16 +130,23 @@ export default function OrderPlacedScreen() {
         <X size={20} color={Colors.text} />
       </TouchableOpacity>
        
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView 
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+      >
         {/* Success Header */}
         <View style={styles.successContainer}>
             <View style={styles.successIconCircle}>
-                <Check size={48} color={Colors.green} />
+                <Check size={48} color={Colors.white} />
             </View>
-            <Text style={styles.successTitle}>Order Confirmed</Text>
+            <Text style={styles.successTitle}>Order Confirmed!</Text>
             <Text style={styles.successSubtitle}>
-                Your order has been successfully placed and is being processed.
+                Your order has been successfully placed and is being processed. We'll notify you about the delivery status.
             </Text>
+            <View style={styles.orderIdBadge}>
+                <Text style={styles.orderIdText}>#{orderData.id || 'N/A'}</Text>
+            </View>
         </View>
 
         {/* Delivery Timeline */}
@@ -134,7 +154,7 @@ export default function OrderPlacedScreen() {
             <Text style={styles.timelineTitle}>Delivery Timeline</Text>
             <View style={styles.timelineItem}>
                 <View style={styles.timelineIcon}>
-                    <Check size={16} color={Colors.green} />
+                    <Check size={16} color={Colors.white} />
                 </View>
                 <View style={styles.timelineContent}>
                     <Text style={styles.timelineStep}>Order Confirmed</Text>
@@ -173,26 +193,60 @@ export default function OrderPlacedScreen() {
         {/* Order Summary */}
         <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Order Summary</Text>
-            <View style={styles.summaryRow}>
-                <Hash size={20} color={Colors.textSecondary} />
-                <Text style={styles.summaryLabel}>Order ID</Text>
-                <Text style={styles.summaryValue}>#{orderData.id}</Text>
+            
+            <View style={styles.summaryItem}>
+                <View style={styles.summaryItemLeft}>
+                    <Hash size={20} color={Colors.primary} />
+                    <Text style={styles.summaryLabel}>Order ID</Text>
+                </View>
             </View>
-            <View style={styles.summaryRow}>
-                <ShoppingBag size={20} color={Colors.textSecondary} />
-                <Text style={styles.summaryLabel}>Total Amount</Text>
-                <Text style={styles.summaryValue}>₹{orderData.total.toFixed(2)}</Text>
+            <View style={styles.summaryValueContainer}>
+                <Text style={styles.summaryValueText}>#{orderData.id || 'N/A'}</Text>
             </View>
-            <View style={styles.summaryRow}>
-                <Wallet size={20} color={Colors.textSecondary} />
-                <Text style={styles.summaryLabel}>Payment Mode</Text>
-                <Text style={styles.summaryValue}>{orderData.paymentMode}</Text>
+            
+            <View style={styles.summaryItem}>
+                <View style={styles.summaryItemLeft}>
+                    <ShoppingBag size={20} color={Colors.primary} />
+                    <Text style={styles.summaryLabel}>Total Amount</Text>
+                </View>
             </View>
-            <View style={[styles.summaryRow, {alignItems: 'flex-start'}]}>
-                <MapPin size={20} color={Colors.textSecondary} />
-                <Text style={styles.summaryLabel}>Deliver to</Text>
-                <Text style={[styles.summaryValue, {textAlign: 'right', flex: 1}]}>{orderData.address}</Text>
+            <View style={styles.summaryValueContainer}>
+                <Text style={[styles.summaryValueText, styles.totalAmountText]}>₹{orderData.total.toFixed(2)}</Text>
             </View>
+            
+            <View style={styles.summaryItem}>
+                <View style={styles.summaryItemLeft}>
+                    <Wallet size={20} color={Colors.primary} />
+                    <Text style={styles.summaryLabel}>Payment Mode</Text>
+                </View>
+            </View>
+            <View style={styles.summaryValueContainer}>
+                <Text style={styles.summaryValueText}>{orderData.paymentMode}</Text>
+            </View>
+            
+            <View style={styles.summaryItem}>
+                <View style={styles.summaryItemLeft}>
+                    <MapPin size={20} color={Colors.primary} />
+                    <Text style={styles.summaryLabel}>Deliver to</Text>
+                </View>
+            </View>
+            <View style={styles.summaryValueContainer}>
+                <Text style={styles.summaryValueText}>{orderData.address}</Text>
+            </View>
+            
+            {orderData.consumerNumber && (
+                <>
+                    <View style={styles.summaryItem}>
+                        <View style={styles.summaryItemLeft}>
+                            <Hash size={20} color={Colors.primary} />
+                            <Text style={styles.summaryLabel}>Consumer Number</Text>
+                        </View>
+                    </View>
+                    <View style={styles.summaryValueContainer}>
+                        <Text style={styles.summaryValueText}>{orderData.consumerNumber}</Text>
+                    </View>
+                </>
+            )}
         </View>
 
         {/* Support Section */}
@@ -225,11 +279,12 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   successContainer: {
     alignItems: 'center',
     paddingVertical: 24,
+    paddingTop: 40,
   },
   successIconCircle: {
     width: 100,
@@ -254,13 +309,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     maxWidth: '90%',
+    marginBottom: 20,
+  },
+  orderIdBadge: {
+    backgroundColor: Colors.primaryLighter,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  orderIdText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.primary,
   },
   // Timeline styles
   timelineCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 20,
-    marginTop: 24,
+    marginTop: 32,
     shadowColor: '#959DA5',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -282,13 +351,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: `${Colors.green}1A`,
+    backgroundColor: Colors.green,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
   },
   timelineIconPending: {
-    backgroundColor: `${Colors.textSecondary}1A`,
+    backgroundColor: Colors.background,
+    borderWidth: 2,
+    borderColor: Colors.border,
   },
   timelineContent: {
     flex: 1,
@@ -308,7 +379,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 20,
-    marginTop: 24,
+    marginTop: 32,
     shadowColor: '#959DA5',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -321,11 +392,23 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 20,
   },
-  summaryRow: {
+  summaryItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 16,
+    marginBottom: 8,
+    paddingBottom: 8,
+  },
+  summaryValueContainer: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  summaryItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
   },
   summaryLabel: {
     fontSize: 15,
@@ -339,12 +422,28 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
   },
+  summaryValueText: {
+    fontSize: 15,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text,
+    paddingLeft: 32,
+  },
+  totalAmountText: {
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.primary,
+  },
+  addressValue: {
+    textAlign: 'right',
+    flex: 1,
+    marginLeft: 16,
+  },
   // Support section styles
   supportCard: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
     padding: 20,
-    marginTop: 24,
+    marginTop: 32,
     shadowColor: '#959DA5',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -379,6 +478,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 16,
   },
+
   closeButton: {
     position: 'absolute',
     right: 16,
