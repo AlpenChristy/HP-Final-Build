@@ -25,6 +25,7 @@ const Colors = {
   white: '#FFFFFF',
   red: '#DC2626',
   redLighter: '#FFEBEE',
+  yellow: '#F59E0B',
 };
 
 
@@ -69,11 +70,12 @@ const ChangePasswordContent = () => (
     </View>
 );
 
-const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSubAdmin }: { 
+const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSubAdmin, onChangePassword }: { 
     setModalView: any, 
     setEditingAdmin: any,
     subAdmins: SubAdminData[],
-    onDeleteSubAdmin: (uid: string) => void
+    onDeleteSubAdmin: (uid: string) => void,
+    onChangePassword: (admin: SubAdminData) => void
 }) => {
     const handleEdit = (admin: SubAdminData) => {
         setEditingAdmin(admin);
@@ -95,6 +97,10 @@ const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSub
         );
     };
 
+    const handleChangePassword = (admin: SubAdminData) => {
+        onChangePassword(admin);
+    };
+
     return (
         <View>
             {subAdmins.map(admin => (
@@ -111,6 +117,9 @@ const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSub
                     <View style={styles.subAdminActions}>
                         <TouchableOpacity onPress={() => handleEdit(admin)}>
                             <Edit size={18} color={Colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleChangePassword(admin)}>
+                            <Lock size={18} color={Colors.yellow} />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => handleDelete(admin)}>
                             <Trash2 size={18} color={Colors.red} />
@@ -867,6 +876,13 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [subAdminToChangePassword, setSubAdminToChangePassword] = useState<SubAdminData | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
 
 
   let [fontsLoaded] = useFonts({
@@ -952,6 +968,62 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
       console.error('Error deleting sub-admin:', error);
       Alert.alert('Error', 'Failed to delete sub-admin. Please try again.');
     }
+  };
+
+  const handleChangeSubAdminPassword = (admin: SubAdminData) => {
+    setSubAdminToChangePassword(admin);
+    setPasswordData({ newPassword: '', confirmPassword: '' });
+    setPasswordModalVisible(true);
+  };
+
+  const handleChangePassword = async () => {
+    if (!subAdminToChangePassword) return;
+
+    // Validate password data
+    if (!passwordData.newPassword.trim() || !passwordData.confirmPassword.trim()) {
+      Alert.alert('Error', 'Please fill in all password fields');
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return;
+    }
+
+    Alert.alert(
+      'Change Password',
+      `Are you sure you want to change the password for ${subAdminToChangePassword.displayName}? This will force them to log out immediately.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Change Password',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setChangingPassword(true);
+              await subAdminService.changeSubAdminPassword(
+                subAdminToChangePassword.uid,
+                passwordData.newPassword
+              );
+              Alert.alert('Success', 'Password changed successfully. The sub-admin will be logged out immediately.');
+              setPasswordModalVisible(false);
+              setSubAdminToChangePassword(null);
+              setPasswordData({ newPassword: '', confirmPassword: '' });
+            } catch (error: any) {
+              console.error('Error changing password:', error);
+              Alert.alert('Error', error.message || 'Failed to change password');
+            } finally {
+              setChangingPassword(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const loadPromocodes = async () => {
@@ -1192,6 +1264,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
                 setEditingAdmin={setEditingAdmin} 
                 subAdmins={subAdmins}
                 onDeleteSubAdmin={handleDeleteSubAdmin}
+                onChangePassword={handleChangeSubAdminPassword}
               /> : 
               <AddSubAdminContent 
                 editingAdmin={editingAdmin} 
@@ -1345,6 +1418,64 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         </View>
       </Modal>
 
+      {/* Password Change Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={passwordModalVisible}
+        onRequestClose={() => setPasswordModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, {paddingBottom: insets.bottom}]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Change Password - {subAdminToChangePassword?.displayName}
+              </Text>
+              <TouchableOpacity onPress={() => setPasswordModalVisible(false)}>
+                <X size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              <View style={styles.modalForm}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>New Password</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    value={passwordData.newPassword} 
+                    onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })} 
+                    placeholder="Enter new password" 
+                    secureTextEntry 
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Confirm Password</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    value={passwordData.confirmPassword} 
+                    onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })} 
+                    placeholder="Confirm new password" 
+                    secureTextEntry 
+                  />
+                </View>
+                <View style={styles.warningBox}>
+                  <Text style={styles.warningText}>
+                    ⚠️ Warning: Changing the password will immediately log out the sub-admin from all their active sessions.
+                  </Text>
+                </View>
+                <TouchableOpacity 
+                  style={[styles.saveButton, styles.passwordButton, changingPassword && styles.saveButtonDisabled]} 
+                  onPress={handleChangePassword}
+                  disabled={changingPassword}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {changingPassword ? 'Changing Password...' : 'Change Password'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
     </View>
   );
@@ -1557,6 +1688,24 @@ const styles = StyleSheet.create({
   saveButtonDisabled: {
     backgroundColor: Colors.textSecondary,
     opacity: 0.6,
+  },
+  passwordButton: {
+    backgroundColor: Colors.yellow,
+  },
+  warningBox: {
+    backgroundColor: Colors.redLighter,
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.red,
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  warningText: {
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.red,
+    lineHeight: 20,
   },
   emptyState: {
     padding: 40,

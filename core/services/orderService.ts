@@ -25,6 +25,7 @@ export interface OrderData {
   orderStatus: 'pending' | 'confirmed' | 'out_for_delivery' | 'delivered' | 'cancelled';
   deliveryAgentId?: string;
   deliveryAgentName?: string;
+  deliveryNotes?: string;
   orderDate: number;
   expectedDelivery?: number;
   deliveredAt?: number;
@@ -252,6 +253,52 @@ export const orderService = {
     }
   },
 
+  // Update order status with delivery notes
+  async updateOrderStatusWithNotes(orderId: string, status: OrderData['orderStatus'], notes?: string): Promise<void> {
+    try {
+      // Try to get order by custom ID first, then fallback to Firebase ID
+      let currentOrder = await this.getOrderByCustomId(orderId);
+      let orderRef;
+      
+      if (currentOrder) {
+        orderRef = doc(FIREBASE_DB, 'orders', currentOrder.id!);
+      } else {
+        // Fallback to Firebase document ID for backward compatibility
+        currentOrder = await this.getOrderById(orderId);
+        if (currentOrder) {
+          orderRef = doc(FIREBASE_DB, 'orders', orderId);
+        } else {
+          throw new Error('Order not found');
+        }
+      }
+      
+      const updateData: any = {
+        orderStatus: status,
+        updatedAt: Date.now(),
+      };
+
+      // Add notes if provided
+      if (notes) {
+        updateData.deliveryNotes = notes;
+      }
+
+      // Add deliveredAt timestamp if marking as delivered
+      if (status === 'delivered') {
+        updateData.deliveredAt = Date.now();
+      }
+
+      await updateDoc(orderRef, updateData);
+
+      // If order is being cancelled, restore stock
+      if (currentOrder && status === 'cancelled' && currentOrder.orderStatus !== 'cancelled') {
+        await this.restoreStockLevels(currentOrder.items);
+      }
+    } catch (error) {
+      console.error('Error updating order status with notes:', error);
+      throw error;
+    }
+  },
+
   // Restore stock levels when order is cancelled
   async restoreStockLevels(items: CartItem[]): Promise<void> {
     try {
@@ -465,6 +512,37 @@ export const orderService = {
       console.log('Order deleted successfully:', orderId);
     } catch (error) {
       console.error('Error deleting order:', error);
+      throw error;
+    }
+  },
+
+  // Delete delivery notes from order
+  async deleteDeliveryNotes(orderId: string): Promise<void> {
+    try {
+      // Try to get order by custom ID first, then fallback to Firebase ID
+      let currentOrder = await this.getOrderByCustomId(orderId);
+      let orderRef;
+      
+      if (currentOrder) {
+        orderRef = doc(FIREBASE_DB, 'orders', currentOrder.id!);
+      } else {
+        // Fallback to Firebase document ID for backward compatibility
+        currentOrder = await this.getOrderById(orderId);
+        if (currentOrder) {
+          orderRef = doc(FIREBASE_DB, 'orders', orderId);
+        } else {
+          throw new Error('Order not found');
+        }
+      }
+      
+      await updateDoc(orderRef, {
+        deliveryNotes: null,
+        updatedAt: Date.now(),
+      });
+      
+      console.log('Delivery notes deleted successfully for order:', orderId);
+    } catch (error) {
+      console.error('Error deleting delivery notes:', error);
       throw error;
     }
   }

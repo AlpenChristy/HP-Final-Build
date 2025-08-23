@@ -11,6 +11,7 @@ export interface UserSession {
   sessionToken: string;
   loginTime: number;
   expiresAt?: number;
+  passwordChangedAt?: number; // Track when password was changed
   permissions?: {
     orders?: boolean;
     delivery?: boolean;

@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, useFonts } from '@expo-google-fonts/inter';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, CheckCircle, Clock, Package, Truck, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -20,6 +20,7 @@ const Colors = {
   white: '#FFFFFF',
   green: '#16A34A',
   yellow: '#F59E0B',
+  red: '#DC2626',
 };
 
 interface TrackingStep {
@@ -71,12 +72,18 @@ const getTrackingSteps = (order: OrderData): TrackingStep[] => {
     });
   }
 
-  // Delivered
+  // Delivered or Cancelled
   if (order.orderStatus === 'delivered' && deliveredAt) {
     steps.push({
       step: 'Delivered',
       completed: true,
       time: deliveredAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })
+    });
+  } else if (order.orderStatus === 'cancelled') {
+    steps.push({
+      step: 'Order Cancelled',
+      completed: true,
+      time: new Date(order.updatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })
     });
   } else {
     steps.push({
@@ -100,7 +107,7 @@ const getStatusInfo = (status: OrderData['orderStatus']) => {
       case 'pending':
         return { Icon: Clock, color: Colors.textSecondary };
       case 'cancelled':
-        return { Icon: X, color: Colors.textSecondary };
+        return { Icon: X, color: Colors.red };
       default:
         return { Icon: Clock, color: Colors.textSecondary };
     }
@@ -155,7 +162,8 @@ export default function OrdersScreen() {
   const currentOrders = orders.filter(o => 
     o.orderStatus === 'pending' || 
     o.orderStatus === 'confirmed' || 
-    o.orderStatus === 'out_for_delivery'
+    o.orderStatus === 'out_for_delivery' ||
+    o.orderStatus === 'cancelled'
   );
   const orderHistory = orders.filter(o => o.orderStatus === 'delivered');
 
@@ -229,6 +237,13 @@ export default function OrdersScreen() {
                 <Text style={styles.linkText}>View Invoice</Text>
             </TouchableOpacity>
           </View>
+
+          {order.deliveryNotes && (
+            <View style={styles.notesContainer}>
+              <Text style={styles.notesLabel}>Delivery Notes:</Text>
+              <Text style={styles.notesText}>{order.deliveryNotes}</Text>
+            </View>
+          )}
         </View>
 
         {showTracking && order.trackingSteps && (
@@ -415,6 +430,17 @@ export default function OrdersScreen() {
                               <Text style={styles.invoiceValue}>{selectedOrder.paymentMethod}</Text>
                             </View>
                         </View>
+
+                        {/* Delivery Notes */}
+                        {selectedOrder.deliveryNotes && (
+                            <View style={styles.invoiceSection}>
+                                <Text style={styles.invoiceSectionTitle}>Delivery Notes</Text>
+                                <View style={styles.invoiceRow}>
+                                  <Text style={styles.invoiceLabel}>Notes:</Text>
+                                  <Text style={[styles.invoiceValue, {textAlign: 'right', flex: 1}]}>{selectedOrder.deliveryNotes}</Text>
+                                </View>
+                            </View>
+                        )}
                     </ScrollView>
                 )}
             </View>
@@ -714,5 +740,25 @@ const styles = StyleSheet.create({
       fontSize: 18,
       fontFamily: 'Inter_700Bold',
       color: Colors.primary,
+  },
+  notesContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: Colors.primaryLighter,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.primary,
+  },
+  notesLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.primary,
+    marginBottom: 4,
+  },
+  notesText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+    lineHeight: 20,
   }
 });

@@ -11,6 +11,7 @@ export interface UserData {
   phoneNumber?: string;
   address?: string;
   consumerNumber?: string;
+  passwordChangedAt?: number; // Timestamp when password was last changed
   createdAt: number;
   updatedAt: number;
 }

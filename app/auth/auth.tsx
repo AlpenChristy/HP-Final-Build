@@ -1,28 +1,28 @@
 import { router } from 'expo-router';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { Eye, EyeOff, Mail, Phone, User } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../core/auth/AuthContext';
 import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 
-import { userService } from '../../core/services/userService';
-import { subAdminService } from '../../core/services/subAdminService';
-import { deliveryAuthService } from '../../core/services/deliveryAuthService';
-import { SessionManager, UserSession } from '../../core/session/sessionManager';
 import { customerAuthService } from '../../core/services/customerAuthService';
+import { deliveryAuthService } from '../../core/services/deliveryAuthService';
+import { subAdminService } from '../../core/services/subAdminService';
+import { userService } from '../../core/services/userService';
+import { SessionManager, UserSession } from '../../core/session/sessionManager';
 
 // Get screen dimensions for responsive design
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');

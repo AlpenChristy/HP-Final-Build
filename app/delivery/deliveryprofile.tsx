@@ -1,14 +1,14 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { updateEmail } from 'firebase/auth';
 import { ArrowLeft, ChevronRight, Lock, LogOut, User, X } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
-import { userService } from '../../core/services/userService';
-import { updateEmail } from 'firebase/auth';
 import { FIREBASE_AUTH } from '../../core/firebase/firebase';
+import { userService } from '../../core/services/userService';
 
 // --- Red Color Palette ---
 const Colors = {

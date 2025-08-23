@@ -56,7 +56,9 @@ export default function DeliverySummaryScreen() {
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
       
-      // Get all orders and filter by delivery agent (in case the query isn't working)
+      console.log('Today date range:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
+      
+      // Get all orders and filter by delivery agent
       let agentOrders = await orderService.getOrdersByDeliveryAgent(userSession.uid);
       
       // If no orders found, try getting all orders and filtering manually
@@ -69,16 +71,17 @@ export default function DeliverySummaryScreen() {
       
       console.log('All agent orders:', agentOrders.length);
       console.log('Agent UID:', userSession.uid);
-      console.log('Sample order:', agentOrders[0]);
-      if (agentOrders[0]) {
-        console.log('Sample order total:', agentOrders[0].total);
-        console.log('Sample order items:', agentOrders[0].items);
-      }
       
-      // Filter today's orders - use createdAt if orderDate is not available
+      // Filter today's orders - check both orderDate and deliveredAt for today's deliveries
       const todayOrders = agentOrders.filter(order => {
         const orderDate = new Date(order.orderDate || order.createdAt);
-        return orderDate >= startOfDay && orderDate <= endOfDay;
+        const deliveredDate = order.deliveredAt ? new Date(order.deliveredAt) : null;
+        
+        // Include orders that were either placed today OR delivered today
+        const isOrderedToday = orderDate >= startOfDay && orderDate <= endOfDay;
+        const isDeliveredToday = deliveredDate && deliveredDate >= startOfDay && deliveredDate <= endOfDay;
+        
+        return isOrderedToday || isDeliveredToday;
       });
       
       console.log('Today orders:', todayOrders.length);
@@ -86,7 +89,11 @@ export default function DeliverySummaryScreen() {
       // Calculate stats
       const totalDeliveries = todayOrders.length;
       const completedDeliveries = todayOrders.filter(order => order.orderStatus === 'delivered').length;
-      const pendingDeliveries = totalDeliveries - completedDeliveries;
+      const pendingDeliveries = todayOrders.filter(order => 
+        order.orderStatus === 'pending' || 
+        order.orderStatus === 'confirmed' || 
+        order.orderStatus === 'out_for_delivery'
+      ).length;
       
       // Calculate total value of delivered products TODAY only
       const todayCompletedOrders = todayOrders.filter(order => order.orderStatus === 'delivered');
@@ -99,29 +106,58 @@ export default function DeliverySummaryScreen() {
       
       console.log('Total value of TODAY\'s delivered products:', earnings);
       
-      setTodayStats({
-        totalDeliveries,
-        completedDeliveries,
-        pendingDeliveries,
-        earnings,
-      });
+      // If no today's orders found, show all-time stats as fallback
+      if (totalDeliveries === 0) {
+        console.log('No today\'s orders found, showing all-time stats as fallback');
+        const allTimeCompleted = agentOrders.filter(order => order.orderStatus === 'delivered').length;
+        const allTimePending = agentOrders.filter(order => 
+          order.orderStatus === 'pending' || 
+          order.orderStatus === 'confirmed' || 
+          order.orderStatus === 'out_for_delivery'
+        ).length;
+        const allTimeEarnings = agentOrders
+          .filter(order => order.orderStatus === 'delivered')
+          .reduce((total, order) => total + order.total, 0);
+        
+        setTodayStats({
+          totalDeliveries: agentOrders.length,
+          completedDeliveries: allTimeCompleted,
+          pendingDeliveries: allTimePending,
+          earnings: allTimeEarnings,
+        });
+      } else {
+        setTodayStats({
+          totalDeliveries,
+          completedDeliveries,
+          pendingDeliveries,
+          earnings,
+        });
+      }
       
       // Get recent deliveries (last 5 completed orders)
       const recentCompletedOrders = agentOrders
         .filter(order => order.orderStatus === 'delivered')
         .sort((a, b) => (b.deliveredAt || b.createdAt) - (a.deliveredAt || a.createdAt))
         .slice(0, 5)
-        .map(order => ({
-          id: order.orderId || order.id,
-          customer: order.customerName,
-          time: new Date(order.deliveredAt || order.createdAt).toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit',
-            hour12: true 
-          }),
-          orderTotal: order.total, // Show actual order total
-          items: order.items, // Include items for product details
-        }));
+        .map(order => {
+          const deliveryDate = new Date(order.deliveredAt || order.createdAt);
+          return {
+            id: order.orderId || order.id,
+            customer: order.customerName,
+            time: deliveryDate.toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit',
+              hour12: true 
+            }),
+            date: deliveryDate.toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric'
+            }),
+            orderTotal: order.total, // Show actual order total
+            items: order.items, // Include items for product details
+          };
+        });
       
       setRecentDeliveries(recentCompletedOrders);
       
@@ -189,7 +225,7 @@ export default function DeliverySummaryScreen() {
                         </View>
                         <View style={styles.deliveryInfo}>
                         <Text style={styles.deliveryCustomer}>{delivery.customer}</Text>
-                        <Text style={styles.deliveryTime}>Delivered at {delivery.time}</Text>
+                        <Text style={styles.deliveryTime}>Delivered at {delivery.time} • {delivery.date}</Text>
                         <Text style={styles.deliveryItems}>
                           {delivery.items?.length || 0} items • {delivery.items?.[0]?.productName || 'Products'}
                         </Text>

@@ -1,13 +1,12 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Edit, Mail, Phone, Plus, Search, Trash2, X } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import { ArrowLeft, Edit, Lock, Mail, Phone, Plus, Search, Trash2, X } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
-import { DeliveryAgent, deliveryAgentService } from '../../core/services/deliveryAgentService';
-import { router } from 'expo-router';
 import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
+import { DeliveryAgent, deliveryAgentService } from '../../core/services/deliveryAgentService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -32,17 +31,24 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
   const { goBack } = useAdminNavigation();
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [agentToEdit, setAgentToEdit] = useState<DeliveryAgent | null>(null);
   const [viewingAgent, setViewingAgent] = useState<DeliveryAgent | null>(null);
+  const [agentToChangePassword, setAgentToChangePassword] = useState<DeliveryAgent | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [agents, setAgents] = useState<DeliveryAgent[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
     password: '',
+  });
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: '',
   });
 
 
@@ -97,9 +103,18 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
   const closeModals = () => {
     setEditModalVisible(false);
     setDetailsModalVisible(false);
+    setPasswordModalVisible(false);
     setAgentToEdit(null);
     setViewingAgent(null);
+    setAgentToChangePassword(null);
     setFormData({ name: '', phone: '', email: '', password: '' });
+    setPasswordData({ newPassword: '', confirmPassword: '' });
+  };
+
+  const openPasswordModal = (agent: DeliveryAgent) => {
+    setAgentToChangePassword(agent);
+    setPasswordData({ newPassword: '', confirmPassword: '' });
+    setPasswordModalVisible(true);
   };
 
 
@@ -173,6 +188,54 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
     );
   };
 
+  const handleChangePassword = async () => {
+    if (!agentToChangePassword) return;
+
+    // Validate password data
+    if (!passwordData.newPassword.trim() || !passwordData.confirmPassword.trim()) {
+      Alert.alert('Error', 'Please fill in all password fields');
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return;
+    }
+
+    Alert.alert(
+      'Change Password',
+      `Are you sure you want to change the password for ${agentToChangePassword.name}? This will force them to log out immediately.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Change Password',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setChangingPassword(true);
+              await deliveryAgentService.changeDeliveryAgentPassword(
+                agentToChangePassword.uid,
+                passwordData.newPassword
+              );
+              Alert.alert('Success', 'Password changed successfully. The delivery agent will be logged out immediately.');
+              closeModals();
+            } catch (error: any) {
+              console.error('Error changing password:', error);
+              Alert.alert('Error', error.message || 'Failed to change password');
+            } finally {
+              setChangingPassword(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (!fontsLoaded) {
     return <View style={styles.loadingContainer} />;
   }
@@ -236,6 +299,12 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
                 onPress={() => openEditModal(agent)}
               >
                 <Edit size={18} color={Colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.passwordButton]}
+                onPress={() => openPasswordModal(agent)}
+              >
+                <Lock size={18} color={Colors.yellow} />
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.actionButton, styles.deleteButton]}
@@ -339,6 +408,68 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
         </View>
       </Modal>
 
+      {/* Password Change Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={passwordModalVisible}
+        onRequestClose={closeModals}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, {paddingBottom: insets.bottom}]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Change Password - {agentToChangePassword?.name}
+              </Text>
+              <TouchableOpacity onPress={closeModals}>
+                <X size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              <View style={styles.modalForm}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>New Password</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    value={passwordData.newPassword} 
+                    onChangeText={(text) => setPasswordData({ ...passwordData, newPassword: text })} 
+                    placeholder="Enter new password" 
+                    secureTextEntry 
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Confirm Password</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    value={passwordData.confirmPassword} 
+                    onChangeText={(text) => setPasswordData({ ...passwordData, confirmPassword: text })} 
+                    placeholder="Confirm new password" 
+                    secureTextEntry 
+                  />
+                </View>
+                <View style={styles.warningBox}>
+                  <Text style={styles.warningText}>
+                    ⚠️ Warning: Changing the password will immediately log out the delivery agent from all their active sessions.
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.saveButton, styles.passwordButton, changingPassword && styles.saveButtonDisabled]} 
+                onPress={handleChangePassword}
+                disabled={changingPassword}
+              >
+                {changingPassword ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <Text style={styles.saveButtonText}>Change Password</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </View>
   );
@@ -536,7 +667,23 @@ const styles = StyleSheet.create({
   modalButtons: {
     flexDirection: 'row',
     gap: 12,
+  },
+  passwordButton: {
+    backgroundColor: Colors.yellow,
+  },
+  warningBox: {
+    backgroundColor: Colors.redLighter,
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.red,
     marginTop: 20,
+  },
+  warningText: {
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.red,
+    lineHeight: 20,
   },
   cancelButton: {
     flex: 1,

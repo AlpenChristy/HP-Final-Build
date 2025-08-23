@@ -1,6 +1,7 @@
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { FIREBASE_AUTH } from '../firebase/firebase';
+import { FIREBASE_AUTH, FIREBASE_DB } from '../firebase/firebase';
 import { subAdminService } from '../services/subAdminService';
 import { userService } from '../services/userService';
 import { SessionManager, UserSession } from '../session/sessionManager';
@@ -31,6 +32,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userSession, setUserSession] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Monitor password changes for delivery agents
+  useEffect(() => {
+    if (!userSession?.uid || userSession.role !== 'delivery') return;
+
+    console.log('Setting up password change monitoring for delivery agent:', userSession.uid);
+    
+    const userRef = doc(FIREBASE_DB, 'users', userSession.uid);
+    const unsubscribe = onSnapshot(userRef, async (doc) => {
+      if (doc.exists()) {
+        const userData = doc.data();
+        const currentPasswordChangedAt = userData.passwordChangedAt;
+        const sessionPasswordChangedAt = userSession.passwordChangedAt;
+
+        // If password was changed after the session was created, force logout
+        if (currentPasswordChangedAt && 
+            (!sessionPasswordChangedAt || currentPasswordChangedAt > sessionPasswordChangedAt)) {
+          console.log('Password change detected for delivery agent, forcing logout');
+          await handleLogout();
+        }
+      }
+    }, (error) => {
+      console.error('Error monitoring password changes:', error);
+    });
+
+    return () => unsubscribe();
+  }, [userSession?.uid, userSession?.role]);
 
   // Initialize auth state on app start
   useEffect(() => {
@@ -82,6 +110,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               role: userData.role || 'customer',
               sessionToken: SessionManager.generateSessionToken(),
               loginTime: Date.now(),
+              passwordChangedAt: userData.passwordChangedAt || undefined,
               permissions,
             };
             
@@ -105,6 +134,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const handleLogin = async (session: UserSession) => {
     try {
+      // For delivery agents, ensure passwordChangedAt is included
+      if (session.role === 'delivery' && !session.passwordChangedAt) {
+        try {
+          const userData = await userService.getUserById(session.uid);
+          if (userData) {
+            session.passwordChangedAt = userData.passwordChangedAt;
+          }
+        } catch (error) {
+          console.warn('Could not fetch passwordChangedAt for delivery agent:', error);
+        }
+      }
+      
       await SessionManager.saveSession(session);
       setUserSession(session);
       console.log('Session saved successfully for:', session.email || session.phoneNumber || session.uid);

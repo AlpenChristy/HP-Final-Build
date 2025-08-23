@@ -123,7 +123,8 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
   const activeOrders = orders.filter(o => 
     o.orderStatus === 'pending' || 
     o.orderStatus === 'confirmed' || 
-    o.orderStatus === 'out_for_delivery'
+    o.orderStatus === 'out_for_delivery' ||
+    o.orderStatus === 'cancelled'
   );
   const completedOrders = orders.filter(o => o.orderStatus === 'delivered');
 
@@ -132,6 +133,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
     { key: 'pending', label: 'Pending', count: activeOrders.filter(o => o.orderStatus === 'pending').length },
     { key: 'confirmed', label: 'Confirmed', count: activeOrders.filter(o => o.orderStatus === 'confirmed').length },
     { key: 'delivery', label: 'Out for Delivery', count: activeOrders.filter(o => o.orderStatus === 'out_for_delivery').length },
+    { key: 'cancelled', label: 'Cancelled', count: activeOrders.filter(o => o.orderStatus === 'cancelled').length },
   ];
 
   const getStatusColor = (status: OrderData['orderStatus']) => {
@@ -179,15 +181,25 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
         >
           {isSelected && <View style={styles.selectionIndicator}><Check size={14} color={Colors.white} /></View>}
           
-          {/* Delete Button */}
-          {onDelete && (
-            <TouchableOpacity 
-              style={styles.deleteButton}
-              onPress={onDelete}
-            >
-              <Trash2 size={16} color={Colors.red} />
-            </TouchableOpacity>
-          )}
+          {/* Action Buttons */}
+          <View style={styles.actionButtonsContainer}>
+            {onDelete && (
+              <TouchableOpacity 
+                style={styles.deleteButton}
+                onPress={onDelete}
+              >
+                <Trash2 size={16} color={Colors.red} />
+              </TouchableOpacity>
+            )}
+                         {order.orderStatus === 'pending' && (
+               <TouchableOpacity 
+                 style={styles.rejectButton}
+                 onPress={() => handleRejectOrder(order.id!, order.customerName)}
+               >
+                 <Text style={styles.rejectButtonText}>R</Text>
+               </TouchableOpacity>
+             )}
+          </View>
           
           <View style={styles.orderHeader}>
             <View>
@@ -217,6 +229,21 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
               {order.orderStatus.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
             </Text>
           </View>
+
+          {order.deliveryNotes && (
+            <View style={styles.notesContainer}>
+              <View style={styles.notesHeader}>
+                <Text style={styles.notesLabel}>Delivery Notes:</Text>
+                <TouchableOpacity 
+                  style={styles.deleteNoteButtonSmall}
+                  onPress={() => handleDeleteNote(order.id!)}
+                >
+                  <Trash2 size={12} color={Colors.red} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.notesText}>{order.deliveryNotes}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
     );
@@ -368,12 +395,61 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
     );
   }
 
+  const handleDeleteNote = async (orderId: string) => {
+    Alert.alert(
+      'Delete Delivery Note',
+      'Are you sure you want to delete this delivery note? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await orderService.deleteDeliveryNotes(orderId);
+              // Local state will update via realtime listener
+              Alert.alert('Success', 'Delivery note deleted successfully');
+            } catch (error) {
+              console.error('Error deleting delivery note:', error);
+              Alert.alert('Error', 'Failed to delete delivery note');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  const handleRejectOrder = async (orderId: string, customerName: string) => {
+    Alert.alert(
+      'Reject Order',
+      `Are you sure you want to reject order #${orderId} for ${customerName}? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Reject Order',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await orderService.updateOrderStatus(orderId, 'cancelled');
+              // Local state will update via realtime listener
+              Alert.alert('Success', 'Order rejected successfully');
+            } catch (error) {
+              console.error('Error rejecting order:', error);
+              Alert.alert('Error', 'Failed to reject order');
+            }
+          },
+        },
+      ]
+    );
+  }
+
   const filteredActiveOrders = selectedFilter === 'all' ? activeOrders : 
     activeOrders.filter(order => {
       switch (selectedFilter) {
         case 'pending': return order.orderStatus === 'pending';
         case 'confirmed': return order.orderStatus === 'confirmed';
         case 'delivery': return order.orderStatus === 'out_for_delivery';
+        case 'cancelled': return order.orderStatus === 'cancelled';
         default: return true;
       }
     });
@@ -570,6 +646,33 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                                     <Text style={styles.modalLabel}>Delivered by:</Text>
                                     <Text style={styles.modalValue}>{selectedOrder.deliveryAgentName}</Text>
                                 </View>
+                                {selectedOrder.deliveredAt && (
+                                    <View style={styles.modalRow}>
+                                        <Text style={styles.modalLabel}>Delivered on:</Text>
+                                        <Text style={styles.modalValue}>
+                                            {new Date(selectedOrder.deliveredAt).toLocaleDateString('en-IN', {
+                                                day: 'numeric',
+                                                month: 'long',
+                                                year: 'numeric'
+                                            })}
+                                        </Text>
+                                    </View>
+                                )}
+                                {selectedOrder.deliveryNotes && (
+                                    <View style={styles.modalRow}>
+                                        <Text style={styles.modalLabel}>Delivery Notes:</Text>
+                                        <View style={{flex: 1, alignItems: 'flex-end'}}>
+                                            <Text style={[styles.modalValue, {textAlign: 'right', marginBottom: 8}]}>{selectedOrder.deliveryNotes}</Text>
+                                            <TouchableOpacity 
+                                                style={styles.deleteNoteButton}
+                                                onPress={() => handleDeleteNote(selectedOrder.id!)}
+                                            >
+                                                <Trash2 size={14} color={Colors.red} />
+                                                <Text style={styles.deleteNoteText}>Delete Note</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                )}
                             </View>
                         )}
 
@@ -623,52 +726,64 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                         )}
                     </ScrollView>
                 )}
-                {(selectedOrder?.orderStatus === 'pending' || 
+                                {(selectedOrder?.orderStatus === 'pending' || 
                   selectedOrder?.orderStatus === 'confirmed' || 
                   selectedOrder?.orderStatus === 'out_for_delivery' || 
                   selectedOrder?.id === 'multiple') && (
-                    <View style={styles.modalFooter}>
-                        <TouchableOpacity 
-                          style={[styles.assignButton, !selectedAgent && styles.assignButtonDisabled]}
-                          onPress={() => {
-                            if (!selectedAgent) {
-                              Alert.alert('Error', 'Please select a delivery agent');
-                              return;
-                            }
-                            const agent = deliveryAgents.find(a => a.id === selectedAgent);
-                            if (!agent) return;
+                  <View style={styles.modalFooter}>
+                      <TouchableOpacity 
+                        style={[styles.assignButton, !selectedAgent && styles.assignButtonDisabled]}
+                        onPress={() => {
+                          if (!selectedAgent) {
+                            Alert.alert('Error', 'Please select a delivery agent');
+                            return;
+                          }
+                          const agent = deliveryAgents.find(a => a.id === selectedAgent);
+                          if (!agent) return;
 
-                            if (selectedOrder.id === 'multiple') {
-                              handleBulkAssignment();
-                            } else if (selectedOrder.id) {
-                              // Check if this is a reassignment
-                              if (selectedOrder.deliveryAgentName && selectedOrder.deliveryAgentId !== agent.id) {
-                                Alert.alert(
-                                  'Change Delivery Agent',
-                                  `Are you sure you want to change the delivery agent from "${selectedOrder.deliveryAgentName}" to "${agent.name}"?`,
-                                  [
-                                    { text: 'Cancel', style: 'cancel' },
-                                    { 
-                                      text: 'Change Agent', 
-                                      onPress: () => handleAssignDeliveryAgent(selectedOrder.id!, agent.id!, agent.name)
-                                    }
-                                  ]
-                                );
-                              } else {
-                                handleAssignDeliveryAgent(selectedOrder.id, agent.id!, agent.name);
-                              }
+                          if (selectedOrder.id === 'multiple') {
+                            handleBulkAssignment();
+                          } else if (selectedOrder.id) {
+                            // Check if this is a reassignment
+                            if (selectedOrder.deliveryAgentName && selectedOrder.deliveryAgentId !== agent.id) {
+                              Alert.alert(
+                                'Change Delivery Agent',
+                                `Are you sure you want to change the delivery agent from "${selectedOrder.deliveryAgentName}" to "${agent.name}"?`,
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { 
+                                    text: 'Change Agent', 
+                                    onPress: () => handleAssignDeliveryAgent(selectedOrder.id!, agent.id!, agent.name)
+                                  }
+                                ]
+                              );
+                            } else {
+                              handleAssignDeliveryAgent(selectedOrder.id, agent.id!, agent.name);
                             }
-                          }}
-                        >
-                            <Text style={styles.assignButtonText}>
-                                {selectedOrder?.id === 'multiple'
-                                  ? 'Assign to Selected Orders'
-                                  : selectedOrder?.deliveryAgentName
-                                    ? 'Change Assignment'
-                                    : 'Confirm Assignment'}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
+                          }
+                        }}
+                      >
+                          <Text style={styles.assignButtonText}>
+                              {selectedOrder?.id === 'multiple'
+                                ? 'Assign to Selected Orders'
+                                : selectedOrder?.deliveryAgentName
+                                  ? 'Change Assignment'
+                                  : 'Confirm Assignment'}
+                          </Text>
+                      </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Reject Order Button - Only show for pending orders */}
+                {selectedOrder?.orderStatus === 'pending' && selectedOrder?.id !== 'multiple' && (
+                  <View style={styles.modalFooter}>
+                    <TouchableOpacity 
+                      style={styles.rejectOrderButton}
+                      onPress={() => handleRejectOrder(selectedOrder.id!, selectedOrder.customerName)}
+                    >
+                      <Text style={styles.rejectOrderButtonText}>Reject Order</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
             </View>
         </View>
@@ -1170,11 +1285,17 @@ const styles = StyleSheet.create({
     elevation: 2,
     marginBottom: 16,
   },
-  // Delete button styles
-  deleteButton: {
+  // Action buttons container
+  actionButtonsContainer: {
     position: 'absolute',
     top: 12,
     right: 12,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 10,
+  },
+  // Delete button styles
+  deleteButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -1183,7 +1304,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.red,
-    zIndex: 10,
+  },
+  // Reject button styles
+  rejectButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.yellow,
+  },
+  rejectButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.yellow,
   },
   // Current agent styles
   currentAgentRow: {
@@ -1253,5 +1389,64 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     color: Colors.textSecondary,
     textAlign: 'center',
+  },
+  notesContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: Colors.primaryLighter,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.primary,
+  },
+  notesLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.primary,
+    marginBottom: 4,
+  },
+  notesText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  notesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  deleteNoteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Colors.red + '10',
+    borderWidth: 1,
+    borderColor: Colors.red + '30',
+    gap: 4,
+  },
+  deleteNoteButtonSmall: {
+    padding: 4,
+    borderRadius: 4,
+    backgroundColor: Colors.red + '10',
+  },
+  deleteNoteText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.red,
+  },
+  rejectOrderButton: {
+    backgroundColor: Colors.yellow,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    flex: 1,
+  },
+  rejectOrderButtonText: {
+    color: Colors.white,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 16,
   }
 });

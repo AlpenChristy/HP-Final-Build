@@ -1,12 +1,12 @@
 // File: core/services/subAdminService.ts
 import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword, deleteUser } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser, getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
-import { FIREBASE_AUTH, FIREBASE_DB, firebaseConfig } from '../firebase/firebase';
+import { FIREBASE_DB, firebaseConfig } from '../firebase/firebase';
 import { userService } from './userService';
 
 // Use secondary app to create sub-admin auth users without affecting current admin session
-const secondaryApp = initializeApp(firebaseConfig, 'Secondary-SubAdmin');
+const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
 const secondaryAuth = getAuth(secondaryApp);
 
 // Sub-admin permissions interface
@@ -25,6 +25,7 @@ export interface SubAdminData {
   role: 'sub-admin';
   permissions: SubAdminPermissions;
   createdBy: string; // Admin UID who created this sub-admin
+  passwordChangedAt?: number; // Timestamp when password was last changed
   createdAt: number;
   updatedAt: number;
   isActive: boolean;
@@ -67,6 +68,7 @@ export const subAdminService = {
         permissions: subAdminData.permissions,
         isActive: true,
         createdBy: adminUid,
+        passwordChangedAt: timestamp, // Set initial password change timestamp
         // Optionally retain password field to match existing flows; safe practice is to REMOVE or hash
         password: subAdminData.password,
         updatedAt: timestamp,
@@ -181,6 +183,57 @@ export const subAdminService = {
     } catch (error) {
       console.error('Error updating sub-admin profile:', error);
       throw error;
+    }
+  },
+
+  // Change sub-admin password (this will force logout)
+  async changeSubAdminPassword(uid: string, newPassword: string): Promise<void> {
+    try {
+      const timestamp = Date.now();
+      
+      // 1. Get current user data BEFORE updating (to get the old password)
+      const userRef = doc(FIREBASE_DB, 'users', uid);
+      const userDoc = await getDoc(userRef);
+      if (!userDoc.exists()) {
+        throw new Error('Sub-admin not found');
+      }
+      
+      const userData = userDoc.data() as any;
+      const email = userData.email;
+      const oldPassword = userData.password;
+      
+      if (!email || !oldPassword) {
+        throw new Error('Email or password not found in user data');
+      }
+
+      // 2. Update Firebase Auth password using secondary auth FIRST
+      try {
+        // Sign in with old password to get current user
+        await signInWithEmailAndPassword(secondaryAuth, email, oldPassword);
+        
+        // Update password in Firebase Auth
+        if (secondaryAuth.currentUser) {
+          await (secondaryAuth.currentUser as any).updatePassword(newPassword);
+          console.log('Firebase Auth password updated successfully');
+        }
+      } catch (authError) {
+        console.warn('Warning: Failed to update Firebase Auth password:', authError);
+        // Continue anyway as the Firestore update is more important for session invalidation
+      } finally {
+        try { await signOut(secondaryAuth); } catch {}
+      }
+
+      // 3. Update the password and passwordChangedAt timestamp in Firestore
+      await updateDoc(userRef, {
+        password: newPassword,
+        passwordChangedAt: timestamp, // This will invalidate all existing sessions
+        updatedAt: timestamp,
+      });
+
+      console.log(`Password changed for sub-admin ${uid} at ${timestamp}`);
+    } catch (error) {
+      console.error('Error changing sub-admin password:', error);
+      throw new Error('Failed to change sub-admin password');
     }
   },
 

@@ -1,8 +1,8 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, CheckCircle, MapPin, Package, Phone, Truck } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle, MapPin, Package, Phone, Truck, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { OrderData, orderService } from '../../core/services/orderService';
@@ -35,6 +35,9 @@ export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScree
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [deliveryNote, setDeliveryNote] = useState('');
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
@@ -95,6 +98,14 @@ export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScree
 
   const handleStatusUpdate = async (orderId: string, newStatus: OrderData['orderStatus']) => {
     try {
+      // If marking as delivered, show note modal first
+      if (newStatus === 'delivered') {
+        setSelectedOrderId(orderId);
+        setDeliveryNote('');
+        setShowNoteModal(true);
+        return;
+      }
+
       await orderService.updateOrderStatus(orderId, newStatus);
       
       // Update local state
@@ -110,6 +121,37 @@ export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScree
     } catch (error) {
       console.error('Error updating order status:', error);
       Alert.alert('Error', 'Failed to update order status');
+    }
+  };
+
+  const handleMarkDelivered = async () => {
+    if (!selectedOrderId) return;
+
+    try {
+      await orderService.updateOrderStatusWithNotes(selectedOrderId, 'delivered', deliveryNote);
+      
+      // Update local state
+      setOrders(currentOrders =>
+        currentOrders.map(order =>
+          order.id === selectedOrderId
+            ? { 
+                ...order, 
+                orderStatus: 'delivered',
+                deliveryNotes: deliveryNote,
+                deliveredAt: Date.now()
+              }
+            : order
+        )
+      );
+
+      setShowNoteModal(false);
+      setSelectedOrderId(null);
+      setDeliveryNote('');
+      
+      Alert.alert('Success', 'Order marked as delivered');
+    } catch (error) {
+      console.error('Error marking order as delivered:', error);
+      Alert.alert('Error', 'Failed to mark order as delivered');
     }
   };
 
@@ -161,6 +203,13 @@ export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScree
           <Text style={styles.phone}>{order.customerPhone}</Text>
           <Text style={styles.orderDate}>{orderDate}</Text>
         </View>
+
+        {order.deliveryNotes && (
+          <View style={styles.notesContainer}>
+            <Text style={styles.notesLabel}>Delivery Notes:</Text>
+            <Text style={styles.notesText}>{order.deliveryNotes}</Text>
+          </View>
+        )}
 
         {showActions && (
           <View style={styles.orderActions}>
@@ -247,6 +296,66 @@ export default function DeliveryOrdersScreen({ navigation }: DeliveryOrdersScree
           )
         )}
       </ScrollView>
+
+      {/* Delivery Note Modal */}
+      <Modal
+        visible={showNoteModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowNoteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Delivery Notes</Text>
+              <TouchableOpacity 
+                onPress={() => setShowNoteModal(false)}
+                style={styles.closeButton}
+              >
+                <X size={24} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.modalSubtitle}>
+              Please add any important notes about the delivery:
+            </Text>
+            
+            <Text style={styles.noteHint}>
+              • Money left with customer{'\n'}
+              • Empty cylinders collected for refill{'\n'}
+              • Any relevant dates to remember{'\n'}
+              • Other important information
+            </Text>
+
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Enter delivery notes..."
+              placeholderTextColor={Colors.textSecondary}
+              value={deliveryNote}
+              onChangeText={setDeliveryNote}
+              multiline={true}
+              numberOfLines={6}
+              textAlignVertical="top"
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowNoteModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={handleMarkDelivered}
+              >
+                <Text style={styles.confirmButtonText}>Mark Delivered</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -431,5 +540,109 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 8,
     textAlign: 'center',
+  },
+  notesContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: Colors.primaryLighter,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.primary,
+  },
+  notesLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.primary,
+    marginBottom: 4,
+  },
+  notesText: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text,
+    marginBottom: 12,
+  },
+  noteHint: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+    backgroundColor: Colors.background,
+    minHeight: 120,
+    marginBottom: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: Colors.border,
+  },
+  confirmButton: {
+    backgroundColor: Colors.primary,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.textSecondary,
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.white,
   },
 });
