@@ -32,7 +32,7 @@ setGlobalOptions({ maxInstances: 10 });
 
 // WhatsApp API Configuration
 const WHATSAPP_CONFIG = {
-  accessToken: "EAAPTyTf77LMBPZA83TamGGB1LZBxKZBUwSeckkB16hpYEpAsj0ZBhZAw8IR3Rq005T9pbYqomwe6OtjJPWVCZBZAIRYhTLRCtgk0sTrNiPCD1LgPpLk29MSZBmMhpXabXFI92JYHnvxCPOroZCM1eVi51atfleJkdZBbfCYYUieIc2gvohW8dVL0z2yT4kDZCslJoq4Hi4qeAxt7tnHrzdXCNr1Xetmx0tJZBgrwkEunwusvH0cgAcBK",
+  accessToken: "EAAPTyTf77LMBPaOEDQxjXAcwyXPxIucAPXtU1q6aRZCmo9ZAajfrrYZB8L78iFllvUuMxWSWr91uIqQ9ZAOpLVZCXoCGR0Rf3l5cJRQIWoHCgPIWaGSFBYOf2u0GvUCFR3yw0TrrjlHHEUhReE7ZAhluSIie9YYXDCzwZCBDdDDfHnljMM4CPKm6oO2lsd6BVZBkyw9MN9WvtOMUxy7XVAlW8UA6yfGGPpfXDBcL0cIIb2ZBLtgZDZD",
   phoneNumberId: "751377694728568",
   apiUrl: "https://graph.facebook.com/v22.0",
   templateName: "first_vihar_template"
@@ -99,7 +99,11 @@ async function verifyOTP(phoneNumber, otp) {
 // Send WhatsApp OTP
 async function sendWhatsAppOTP(phoneNumber, otp) {
   try {
+    logger.info('=== START: sendWhatsAppOTP ===');
+    logger.info('Input parameters:', { phoneNumber, otp });
+    
     const url = `${WHATSAPP_CONFIG.apiUrl}/${WHATSAPP_CONFIG.phoneNumberId}/messages`;
+    logger.info('WhatsApp API URL:', url);
     
     const payload = {
       messaging_product: "whatsapp",
@@ -127,33 +131,61 @@ async function sendWhatsAppOTP(phoneNumber, otp) {
       }
     };
     
-    logger.info('Sending WhatsApp OTP', {
-      phoneNumber: phoneNumber,
-      otp: otp
+    logger.info('WhatsApp API payload:', JSON.stringify(payload, null, 2));
+    logger.info('WhatsApp config:', {
+      phoneNumberId: WHATSAPP_CONFIG.phoneNumberId,
+      templateName: WHATSAPP_CONFIG.templateName,
+      accessTokenLength: WHATSAPP_CONFIG.accessToken?.length || 0
     });
     
+    logger.info('Making axios POST request to WhatsApp API...');
     const response = await axios.post(url, payload, {
       headers: {
         'Authorization': `Bearer ${WHATSAPP_CONFIG.accessToken}`,
         'Content-Type': 'application/json'
+      },
+      timeout: 30000 // 30 second timeout
+    });
+    
+    logger.info('WhatsApp API response received:', {
+      status: response.status,
+      statusText: response.statusText,
+      data: response.data
+    });
+    
+    const messageId = response.data.messages?.[0]?.id;
+    logger.info('WhatsApp OTP sent successfully', {
+      phoneNumber: phoneNumber,
+      messageId: messageId
+    });
+    
+    logger.info('=== END: sendWhatsAppOTP (SUCCESS) ===');
+    return { success: true, messageId: messageId };
+    
+  } catch (error) {
+    logger.error('=== ERROR: sendWhatsAppOTP ===');
+    logger.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      response: {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      },
+      request: {
+        url: error.config?.url,
+        method: error.config?.method,
+        headers: error.config?.headers
       }
     });
     
-    logger.info('WhatsApp OTP sent successfully', {
-      phoneNumber: phoneNumber,
-      messageId: response.data.messages?.[0]?.id
-    });
+    const errorMessage = error.response?.data?.error?.message || error.message;
+    logger.error('Final error message:', errorMessage);
     
-    return { success: true, messageId: response.data.messages?.[0]?.id };
-  } catch (error) {
-    logger.error('Error sending WhatsApp OTP', {
-      phoneNumber: phoneNumber,
-      error: error.response?.data || error.message
-    });
-    
+    logger.info('=== END: sendWhatsAppOTP (ERROR) ===');
     return { 
       success: false, 
-      error: error.response?.data?.error?.message || error.message 
+      error: errorMessage 
     };
   }
 }
@@ -262,12 +294,16 @@ exports.verifyPasswordResetOTP = onCall({ maxInstances: 10 }, async (request) =>
 // Cloud Function: Send OTP for Password Reset (no auth required)
 exports.sendPasswordResetOTP = onCall({ maxInstances: 10 }, async (request) => {
   try {
+    logger.info('=== START: sendPasswordResetOTP Cloud Function ===');
+    logger.info('Request data:', request.data);
+    logger.info('Request auth:', request.auth);
+    
     const { phoneNumber } = request.data;
     
-    logger.info('sendPasswordResetOTP called with:', { phoneNumber });
+    logger.info('Extracted phone number:', phoneNumber);
     
     if (!phoneNumber) {
-      logger.error('No phone number provided');
+      logger.error('No phone number provided in request data');
       throw new Error('Phone number is required');
     }
     
@@ -278,10 +314,12 @@ exports.sendPasswordResetOTP = onCall({ maxInstances: 10 }, async (request) => {
     logger.info('Generated OTP:', otp);
     
     // Store OTP in Firestore
+    logger.info('Storing OTP in Firestore...');
     await storeOTP(phoneNumber, otp);
-    logger.info('OTP stored in Firestore for phone:', phoneNumber);
+    logger.info('OTP stored successfully in Firestore for phone:', phoneNumber);
     
     // Send OTP via WhatsApp
+    logger.info('Calling sendWhatsAppOTP function...');
     const result = await sendWhatsAppOTP(phoneNumber, otp);
     logger.info('WhatsApp OTP send result:', result);
     
@@ -290,7 +328,7 @@ exports.sendPasswordResetOTP = onCall({ maxInstances: 10 }, async (request) => {
       throw new Error(`Failed to send OTP: ${result.error}`);
     }
     
-    logger.info('Password reset OTP sent successfully');
+    logger.info('=== SUCCESS: Password reset OTP sent successfully ===');
     return {
       success: true,
       message: 'Password reset OTP sent successfully',
@@ -298,77 +336,19 @@ exports.sendPasswordResetOTP = onCall({ maxInstances: 10 }, async (request) => {
     };
     
   } catch (error) {
-    logger.error('Error in sendPasswordResetOTP function', { error: error.message, stack: error.stack });
+    logger.error('=== ERROR: sendPasswordResetOTP Cloud Function ===');
+    logger.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code
+    });
+    logger.error('=== END: sendPasswordResetOTP (ERROR) ===');
     throw new Error(error.message);
   }
 });
 
-// Cloud Function: Reset Password with OTP
-exports.resetPasswordWithOTP = onCall({ maxInstances: 10 }, async (request) => {
-  try {
-    const { phoneNumber, otp, newPassword } = request.data;
-    
-    logger.info('resetPasswordWithOTP called with:', { phoneNumber, otp });
-    
-    if (!otp || !newPassword) {
-      logger.error('Missing OTP or new password');
-      throw new Error('OTP and new password are required');
-    }
-    
-    if (!phoneNumber) {
-      logger.error('No phone number provided');
-      throw new Error('Phone number is required');
-    }
-    
-    logger.info('Target phone number for password reset:', phoneNumber);
-    
-    // Verify OTP first
-    const otpResult = await verifyOTP(phoneNumber, otp);
-    logger.info('OTP verification result for password reset:', otpResult);
-    
-    if (!otpResult.valid) {
-      logger.error('Invalid OTP for password reset');
-      throw new Error('Invalid OTP');
-    }
-    
-    // Find user by phone number
-    const db = getFirestore();
-    const usersRef = db.collection('users');
-    const query = usersRef.where('phoneNumber', '==', phoneNumber);
-    const snapshot = await query.get();
-    
-    if (snapshot.empty) {
-      logger.error('User not found with phone number:', phoneNumber);
-      throw new Error('User not found with this phone number');
-    }
-    
-    const userDoc = snapshot.docs[0];
-    const userUid = userDoc.id;
-    logger.info('Found user UID for password reset:', userUid);
-    
-    // Update password in Firebase Auth
-    const auth = getAuth();
-    await auth.updateUser(userUid, { password: newPassword });
-    logger.info('Password updated in Firebase Auth for user:', userUid);
-    
-    // Update password in Firestore users collection
-    await userDoc.ref.update({ 
-      password: newPassword,
-      passwordChangedAt: new Date(),
-      updatedAt: new Date()
-    });
-    logger.info('Password updated in Firestore for user:', userUid);
-    
-    return {
-      success: true,
-      message: 'Password reset successfully'
-    };
-    
-  } catch (error) {
-    logger.error('Error in resetPasswordWithOTP function', { error: error.message, stack: error.stack });
-    throw new Error(error.message);
-  }
-});
+
 
 // Test function
 exports.helloWorld = onRequest((request, response) => {

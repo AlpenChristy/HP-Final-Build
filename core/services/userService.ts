@@ -1,5 +1,5 @@
 // File: core/services/userService.ts
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { FIREBASE_DB } from '../firebase/firebase';
 
 // User data interface
@@ -83,5 +83,28 @@ export const userService = {
       passwordChangedAt: Date.now(),
       updatedAt: Date.now(),
     });
+  },
+
+  // Find user by phone number
+  async getUserByPhoneNumber(phoneNumber: string): Promise<UserData | null> {
+    try {
+      const usersQuery = query(
+        collection(FIREBASE_DB, 'users'),
+        where('phoneNumber', '==', phoneNumber)
+      );
+      
+      const usersSnapshot = await getDocs(usersQuery);
+      
+      if (usersSnapshot.empty) {
+        return null;
+      }
+      
+      // Return the first user found (assuming phone numbers are unique)
+      const userDoc = usersSnapshot.docs[0];
+      return { uid: userDoc.id, ...userDoc.data() } as UserData;
+    } catch (error) {
+      console.error('Error finding user by phone number:', error);
+      return null;
+    }
   }
 };

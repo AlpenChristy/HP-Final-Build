@@ -1,6 +1,5 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
-import { updateEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 import { ArrowLeft, Bell, ChevronRight, Edit, HelpCircle, Lock, LogOut, Mail, MapPin, Phone, Tag, Trash2, Truck, User, X, Eye, EyeOff } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -8,12 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useAddress } from '../../core/context/AddressContext';
 import { useConsumerNumber } from '../../core/context/ConsumerNumberContext';
-import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
 import { WhatsAppOtpService } from '../../core/services/whatsappOtpService';
 import { createToastHelpers } from '../../core/utils/toastUtils';
+import { customerAuthService } from '../../core/services/customerAuthService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -113,7 +112,7 @@ const PersonalInfoContent = ({ user, onSave, isSaving }: { user: any, onSave: (n
     );
 };
 
-const DeliveryAddressContent = ({ user, onUpdateAddress }) => {
+const DeliveryAddressContent = ({ user, onUpdateAddress }: { user: any, onUpdateAddress: (address: string) => void }) => {
     const { address: sharedAddress, updateAddress } = useAddress();
     const toast = createToastHelpers();
     const [isEditing, setIsEditing] = useState(false);
@@ -382,7 +381,7 @@ const HelpSupportContent = () => (
     </View>
 );
 
-const ChangePasswordContent = ({ onForgotPassword }) => {
+const ChangePasswordContent = ({ onForgotPassword }: { onForgotPassword: () => void }) => {
     const { userSession } = useAuth();
     const toast = createToastHelpers();
     const [currentPassword, setCurrentPassword] = useState('');
@@ -417,22 +416,24 @@ const ChangePasswordContent = ({ onForgotPassword }) => {
 
         setIsLoading(true);
         try {
-            const currentUser = FIREBASE_AUTH.currentUser;
-            if (!currentUser || !currentUser.email) {
-                throw new Error('User not authenticated or email not available');
+            // Get current user data from Firestore to verify current password
+            if (!userSession?.uid) {
+                throw new Error('User session not available');
             }
 
-            // Re-authenticate user with current password
-            const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
-            await reauthenticateWithCredential(currentUser, credential);
-
-            // Update password in Firebase Auth
-            await updatePassword(currentUser, newPassword);
-
-            // Update password in Firestore
-            if (userSession?.uid) {
-                await userService.updateUserPassword(userSession.uid, newPassword);
+            const userData = await userService.getUserById(userSession.uid);
+            if (!userData) {
+                throw new Error('User data not found');
             }
+
+            // Verify current password (same pattern as authentication)
+            if (userData.password !== currentPassword) {
+                toast.showError('Error', 'Current password is incorrect.');
+                return;
+            }
+
+            // Update password in Firestore using customer auth service
+            await customerAuthService.updateCustomerPassword(userSession.uid, newPassword);
 
             toast.showSuccess('Success', 'Password updated successfully!');
             
@@ -443,14 +444,7 @@ const ChangePasswordContent = ({ onForgotPassword }) => {
 
         } catch (error: any) {
             console.error('Error changing password:', error);
-            
-            if (error.code === 'auth/wrong-password') {
-                toast.showError('Error', 'Current password is incorrect.');
-            } else if (error.code === 'auth/weak-password') {
-                toast.showError('Error', 'New password is too weak. Please choose a stronger password.');
-            } else {
-                toast.showError('Error', error.message || 'Failed to update password. Please try again.');
-            }
+            toast.showError('Error', error.message || 'Failed to update password. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -542,10 +536,11 @@ const ForgotPasswordContent = () => {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [countdown, setCountdown] = useState(0);
     const [userPhoneNumber, setUserPhoneNumber] = useState<string>('');
+    const [verifiedOtp, setVerifiedOtp] = useState<string>('');
     const toast = createToastHelpers();
 
     useEffect(() => {
-        let timer: NodeJS.Timeout;
+        let timer: number;
         if (countdown > 0) {
             timer = setTimeout(() => setCountdown(countdown - 1), 1000);
         }
@@ -566,8 +561,8 @@ const ForgotPasswordContent = () => {
                 console.log('User data fetched:', user);
                 
                 if (user) {
-                    setUserPhoneNumber(user.phoneNumber || user.mobile || '');
-                    console.log('Phone number set:', user.phoneNumber || user.mobile);
+                    setUserPhoneNumber(user.phoneNumber || '');
+                    console.log('Phone number set:', user.phoneNumber);
                 }
             } catch (error) {
                 console.error('Error fetching user data:', error);
@@ -626,6 +621,7 @@ const ForgotPasswordContent = () => {
             console.log('OTP verification result:', result);
             
             if (result.valid) {
+                setVerifiedOtp(otp); // Store the verified OTP
                 setStep('password');
                 toast.showOtpVerifiedSuccess();
                 console.log('OTP verified successfully');
@@ -654,14 +650,11 @@ const ForgotPasswordContent = () => {
 
         setIsLoading(true);
         try {
-            console.log('Resetting password with OTP:', otp);
-            console.log('Using phone:', userPhoneNumber);
-            
-            // Format phone number
-            const formattedPhoneNumber = WhatsAppOtpService.formatPhoneNumber(userPhoneNumber);
-            console.log('Formatted phone number for password reset:', formattedPhoneNumber);
+            // Update password in Firestore using customer auth service
+            if (userSession?.uid) {
+                await customerAuthService.updateCustomerPassword(userSession.uid, newPassword);
+            }
 
-            await WhatsAppOtpService.resetPasswordWithOTP(otp, newPassword, formattedPhoneNumber);
             toast.showPasswordResetSuccess();
             console.log('Password reset successfully');
             
@@ -669,10 +662,11 @@ const ForgotPasswordContent = () => {
             setOtp('');
             setNewPassword('');
             setConfirmPassword('');
+            setVerifiedOtp('');
             setStep('verify');
         } catch (error: any) {
             console.error('Error resetting password:', error);
-            toast.showPasswordResetError(error.message);
+            toast.showError('Error', error.message || 'Failed to reset password. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -688,17 +682,17 @@ const ForgotPasswordContent = () => {
         }
     };
 
-        if (step === 'verify') {
+    if (step === 'verify') {
         return (
-    <View>
+            <View>
                 <Text style={styles.infoValue}>
                     Click the button below to receive a password reset OTP via WhatsApp on your registered number.
                 </Text>
                 {userPhoneNumber && (
-        <View style={[styles.infoRow, {marginTop: 20}]}>
+                    <View style={[styles.infoRow, {marginTop: 20}]}>
                         <Text style={styles.infoLabel}>Registered Phone Number</Text>
                         <Text style={styles.infoValue}>{userPhoneNumber}</Text>
-        </View>
+                    </View>
                 )}
                 <TouchableOpacity 
                     style={[styles.addButton, isLoading && { opacity: 0.7 }]}
@@ -708,9 +702,9 @@ const ForgotPasswordContent = () => {
                     <Text style={styles.addButtonText}>
                         {isLoading ? 'Sending OTP...' : 'Verify using OTP'}
                     </Text>
-        </TouchableOpacity>
-    </View>
-);
+                </TouchableOpacity>
+            </View>
+        );
     }
 
     if (step === 'otp') {
@@ -953,7 +947,7 @@ export default function ProfileScreen() {
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
 
-  const openModal = (contentKey) => {
+  const openModal = (contentKey: string) => {
       setModalContent(contentKey);
       setModalVisible(true);
   }
@@ -987,23 +981,13 @@ export default function ProfileScreen() {
         await updateConsumerNumber(consumerNumber);
       }
 
-      // 3) Try to update Firebase Auth email as well (might require recent login)
-      const currentUser = FIREBASE_AUTH.currentUser;
-      if (currentUser && currentUser.email !== email) {
-        try {
-          await updateEmail(currentUser, email);
-        } catch (err) {
-          console.warn('Failed to update Firebase Auth email, keeping Firestore and session email:', err);
-        }
-      }
-
-      // 4) Refresh local session
+      // 3) Refresh local session
       await login({ ...userSession, displayName: name, email });
 
-      // 5) Update local screen state
+      // 4) Update local screen state
       setUserData(prev => prev ? { ...prev, displayName: name, email } : prev);
 
-      // 6) Refresh user data to ensure consistency
+      // 5) Refresh user data to ensure consistency
       refreshUserData();
 
       setModalVisible(false);
@@ -1133,27 +1117,24 @@ export default function ProfileScreen() {
         statusBarTranslucent={true}
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView 
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-        >
-            <View style={[styles.modalContainer, {paddingBottom: insets.bottom + 10}]}>
-                <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>{getModalTitle()}</Text>
-                    <TouchableOpacity onPress={() => setModalVisible(false)}>
-                        <X size={24} color={Colors.textSecondary} />
-                    </TouchableOpacity>
-                </View>
-                <ScrollView 
-                  style={styles.modalContent}
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                >
-                    {renderModalContent()}
-                </ScrollView>
-            </View>
-        </KeyboardAvoidingView>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, {paddingBottom: insets.bottom + 10}]}>
+              <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{getModalTitle()}</Text>
+                  <TouchableOpacity onPress={() => setModalVisible(false)}>
+                      <X size={24} color={Colors.textSecondary} />
+                  </TouchableOpacity>
+              </View>
+              <ScrollView 
+                style={styles.modalContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ flexGrow: 1 }}
+              >
+                  {renderModalContent()}
+              </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1292,11 +1273,19 @@ const styles = StyleSheet.create({
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.5)',
       justifyContent: 'flex-end',
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 1000,
   },
+
   modalContainer: {
       backgroundColor: Colors.surface,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
+      zIndex: 1001,
   },
   modalHeader: {
       flexDirection: 'row',
@@ -1577,10 +1566,6 @@ const styles = StyleSheet.create({
       color: Colors.white,
       fontFamily: 'Inter_600SemiBold',
       fontSize: 14,
-  },
-  loadingContainer: {
-      padding: 20,
-      alignItems: 'center',
   },
   loadingText: {
       fontSize: 14,

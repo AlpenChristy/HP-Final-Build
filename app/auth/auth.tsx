@@ -1,11 +1,11 @@
 import { router } from 'expo-router';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { Eye, EyeOff, Mail, Phone, User } from 'lucide-react-native';
-import { useState } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { Eye, EyeOff, Mail, Phone, User, X } from 'lucide-react-native';
+import React, { useState } from 'react';
 import {
     ActivityIndicator,
-    Dimensions,
     Image,
+    Modal,
     ScrollView,
     StyleSheet,
     Text,
@@ -21,12 +21,9 @@ import { createToastHelpers } from '../../core/utils/toastUtils';
 import { customerAuthService } from '../../core/services/customerAuthService';
 import { deliveryAuthService } from '../../core/services/deliveryAuthService';
 import { subAdminAuthService } from '../../core/services/subAdminAuthService';
-import { subAdminService } from '../../core/services/subAdminService';
 import { userService } from '../../core/services/userService';
 import { SessionManager, UserSession } from '../../core/session/sessionManager';
-
-// Get screen dimensions for responsive design
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+import { WhatsAppOtpService } from '../../core/services/whatsappOtpService';
 
 interface FormData {
   name: string;
@@ -35,6 +32,202 @@ interface FormData {
   password: string;
   confirmPassword: string;
 }
+
+// ForgotPasswordModal component moved outside to prevent re-rendering
+const ForgotPasswordModal = ({ 
+  visible, 
+  onClose, 
+  step, 
+  phone, 
+  onPhoneChange, 
+  otp, 
+  onOtpChange, 
+  newPassword, 
+  onNewPasswordChange, 
+  confirmPassword, 
+  onConfirmPasswordChange,
+  showPassword,
+  onShowPasswordChange,
+  showConfirmPassword,
+  onShowConfirmPasswordChange,
+  isLoading,
+  countdown,
+  onPhoneSubmit,
+  onOtpSubmit,
+  onPasswordReset,
+  onResendOtp
+}: {
+  visible: boolean;
+  onClose: () => void;
+  step: 'phone' | 'otp' | 'password';
+  phone: string;
+  onPhoneChange: (text: string) => void;
+  otp: string;
+  onOtpChange: (text: string) => void;
+  newPassword: string;
+  onNewPasswordChange: (text: string) => void;
+  confirmPassword: string;
+  onConfirmPasswordChange: (text: string) => void;
+  showPassword: boolean;
+  onShowPasswordChange: (show: boolean) => void;
+  showConfirmPassword: boolean;
+  onShowConfirmPasswordChange: (show: boolean) => void;
+  isLoading: boolean;
+  countdown: number;
+  onPhoneSubmit: () => void;
+  onOtpSubmit: () => void;
+  onPasswordReset: () => void;
+  onResendOtp: () => void;
+}) => (
+  <Modal
+    animationType="slide"
+    transparent={true}
+    visible={visible}
+    onRequestClose={onClose}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Forgot Password</Text>
+          <TouchableOpacity onPress={onClose}>
+            <X size={24} color={Colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+        
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          {step === 'phone' && (
+            <View>
+              <Text style={styles.modalDescription}>
+                Enter your registered phone number to receive a password reset OTP via WhatsApp.
+              </Text>
+              <View style={styles.inputWrapper}>
+                <Phone size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your phone number"
+                  value={phone}
+                  onChangeText={onPhoneChange}
+                  keyboardType="phone-pad"
+                  placeholderTextColor={Colors.textSecondary}
+                  editable={!isLoading}
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.submitButton, isLoading && styles.disabledButton]}
+                onPress={onPhoneSubmit}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <Text style={styles.submitButtonText}>Send OTP</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {step === 'otp' && (
+            <View>
+              <Text style={styles.modalDescription}>
+                Enter the 6-digit OTP sent to your WhatsApp.
+              </Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter 6-digit OTP"
+                  value={otp}
+                  onChangeText={onOtpChange}
+                  keyboardType="numeric"
+                  maxLength={6}
+                  placeholderTextColor={Colors.textSecondary}
+                  editable={!isLoading}
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.submitButton, isLoading && styles.disabledButton]}
+                onPress={onOtpSubmit}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <Text style={styles.submitButtonText}>Verify OTP</Text>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.resendButton, countdown > 0 && { opacity: 0.5 }]}
+                onPress={onResendOtp}
+                disabled={countdown > 0 || isLoading}
+              >
+                <Text style={styles.resendButtonText}>
+                  {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {step === 'password' && (
+            <View>
+              <Text style={styles.modalDescription}>
+                Enter your new password.
+              </Text>
+              <View style={styles.inputWrapper}>
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder="Enter new password"
+                    value={newPassword}
+                    onChangeText={onNewPasswordChange}
+                    secureTextEntry={!showPassword}
+                    placeholderTextColor={Colors.textSecondary}
+                    editable={!isLoading}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => onShowPasswordChange(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={styles.inputWrapper}>
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder="Confirm new password"
+                    value={confirmPassword}
+                    onChangeText={onConfirmPasswordChange}
+                    secureTextEntry={!showConfirmPassword}
+                    placeholderTextColor={Colors.textSecondary}
+                    editable={!isLoading}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => onShowConfirmPasswordChange(!showConfirmPassword)}
+                  >
+                    {showConfirmPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[styles.submitButton, isLoading && styles.disabledButton]}
+                onPress={onPasswordReset}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <Text style={styles.submitButtonText}>Reset Password</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </View>
+  </Modal>
+);
 
 export default function AuthScreen() {
   const { login } = useAuth();
@@ -50,6 +243,19 @@ export default function AuthScreen() {
     password: '',
     confirmPassword: '',
   });
+
+  // Forgot password modal state
+  const [forgotPasswordModalVisible, setForgotPasswordModalVisible] = useState(false);
+  const [forgotPasswordStep, setForgotPasswordStep] = useState<'phone' | 'otp' | 'password'>('phone');
+  const [forgotPasswordPhone, setForgotPasswordPhone] = useState('');
+  const [forgotPasswordOtp, setForgotPasswordOtp] = useState('');
+  const [forgotPasswordNewPassword, setForgotPasswordNewPassword] = useState('');
+  const [forgotPasswordConfirmPassword, setForgotPasswordConfirmPassword] = useState('');
+  const [forgotPasswordShowPassword, setForgotPasswordShowPassword] = useState(false);
+  const [forgotPasswordShowConfirmPassword, setForgotPasswordShowConfirmPassword] = useState(false);
+  const [forgotPasswordCountdown, setForgotPasswordCountdown] = useState(0);
+  const [forgotPasswordIsLoading, setForgotPasswordIsLoading] = useState(false);
+  const [foundUser, setFoundUser] = useState<any>(null);
 
   const validateForm = (): boolean => {
     if (!isLogin) {
@@ -123,20 +329,20 @@ export default function AuthScreen() {
           } catch (customerError) {
             // If customer auth fails, try sub-admin phone auth
             try {
-                             const subAdminPhoneSession = await subAdminAuthService.authenticateSubAdminByPhone(formData.phone, formData.password);
-               if (subAdminPhoneSession) {
-                 // Ensure the session has expiresAt and passwordChangedAt
-                 const sessionWithExpiry = {
-                   ...subAdminPhoneSession,
-                   expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
-                 };
-                 await login(sessionWithExpiry);
-                 toast.showLoginSuccess();
-                 setTimeout(() => {
-                   router.replace('/admin');
-                 }, 300);
-                 return;
-               }
+              const subAdminPhoneSession = await subAdminAuthService.authenticateSubAdminByPhone(formData.phone, formData.password);
+              if (subAdminPhoneSession) {
+                // Ensure the session has expiresAt and passwordChangedAt
+                const sessionWithExpiry = {
+                  ...subAdminPhoneSession,
+                  expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+                };
+                await login(sessionWithExpiry);
+                toast.showLoginSuccess();
+                setTimeout(() => {
+                  router.replace('/admin');
+                }, 300);
+                return;
+              }
             } catch (subAdminError: any) {
               // Check if it's a specific sub-admin error
               if (subAdminError.message.includes('deactivated')) {
@@ -171,15 +377,20 @@ export default function AuthScreen() {
             }
           }
         } else {
+          // Email-based authentication - use the same pattern as sub-admin and delivery
           try {
-            // First try Firebase Auth login (email)
-            userCredential = await signInWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
-            // Get user data from Firestore
-            userData = await userService.getUserById(userCredential.user.uid);
-          } catch (firebaseError: any) {
-            // If Firebase Auth fails, try delivery agent and sub-admin authentication (email based)
-            
-            // Try delivery agent authentication
+            // Try customer authentication first (same pattern as sub-admin/delivery)
+            const customerSession = await customerAuthService.authenticateByEmail(formData.email, formData.password);
+            if (customerSession) {
+              await login(customerSession);
+              toast.showLoginSuccess();
+              setTimeout(() => {
+                router.replace('/customer/home');
+              }, 300);
+              return;
+            }
+          } catch (customerError: any) {
+            // If customer auth fails, try delivery agent authentication
             try {
               const deliverySession = await deliveryAuthService.authenticateDeliveryAgent(formData.email, formData.password);
               if (deliverySession) {
@@ -199,31 +410,70 @@ export default function AuthScreen() {
               // Silently continue to next auth method
             }
             
-                         // Try sub-admin authentication
-             try {
-               const subAdminSession = await subAdminAuthService.authenticateSubAdmin(formData.email, formData.password);
-               if (subAdminSession) {
-                 // Ensure the session has expiresAt
-                 const sessionWithExpiry = {
-                   ...subAdminSession,
-                   expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
-                 };
-                 await login(sessionWithExpiry);
-                 toast.showLoginSuccess();
-                 setTimeout(() => {
-                   router.replace('/admin');
-                 }, 300);
-                 return;
-               }
-             } catch (subAdminError) {
-               // Silently continue to next auth method
-             }
+            // Try sub-admin authentication
+            try {
+              const subAdminSession = await subAdminAuthService.authenticateSubAdmin(formData.email, formData.password);
+              if (subAdminSession) {
+                // Ensure the session has expiresAt
+                const sessionWithExpiry = {
+                  ...subAdminSession,
+                  expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+                };
+                await login(sessionWithExpiry);
+                toast.showLoginSuccess();
+                setTimeout(() => {
+                  router.replace('/admin');
+                }, 300);
+                return;
+              }
+            } catch (subAdminError: any) {
+              // Check if it's a specific sub-admin error
+              if (subAdminError.message.includes('deactivated')) {
+                toast.showError('Account Deactivated', 'Your account has been deactivated. Please contact admin.');
+                return;
+              }
+              // Silently continue to next auth method
+            }
             
-            // If all email flows fail, throw the original Firebase error
-            throw firebaseError;
+            // If all custom auth methods fail, try Firebase Auth as fallback (for legacy users)
+            try {
+              userCredential = await signInWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
+              // Get user data from Firestore
+              userData = await userService.getUserById(userCredential.user.uid);
+              
+              // Create session for Firebase Auth user
+              const emailLoginSession: UserSession = {
+                uid: userCredential.user.uid,
+                email: userCredential.user.email || formData.email || undefined,
+                displayName: userCredential.user.displayName || userData?.displayName || formData.name,
+                phoneNumber: userData?.phoneNumber,
+                role: userData?.role || 'customer',
+                sessionToken: SessionManager.generateSessionToken(),
+                loginTime: Date.now(),
+                expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
+                passwordChangedAt: userData?.passwordChangedAt || undefined,
+              };
+
+              await login(emailLoginSession);
+              toast.showLoginSuccess();
+              setTimeout(() => {
+                if (emailLoginSession.role === 'admin' || emailLoginSession.role === 'sub-admin') {
+                  router.replace('/admin');
+                } else if (emailLoginSession.role === 'delivery') {
+                  router.replace('/delivery/deliverydashboard');
+                } else {
+                  router.replace('/customer/home');
+                }
+              }, 300);
+              return;
+                         } catch {
+               // If all authentication methods fail, throw the original customer error
+               throw customerError;
+             }
           }
         }
       } else {
+        // Registration
         if (usePhoneAuth) {
           // Register customer via phone (custom auth)
           const created = await customerAuthService.registerWithPhone(formData.name, formData.phone, formData.password);
@@ -243,89 +493,25 @@ export default function AuthScreen() {
           }, 300);
           return;
         } else {
-          // Register with Firebase (email)
-          userCredential = await createUserWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
-          // Update Firebase Auth profile
-          await updateProfile(userCredential.user, {
-            displayName: formData.name
-          });
-          // Create user in Firestore
-          await userService.createUser({
-            uid: userCredential.user.uid,
-            email: formData.email,
-            displayName: formData.name,
-            phoneNumber: formData.phone,
-            role: 'customer'
-          });
-          // Get the created user data
-          userData = await userService.getUserById(userCredential.user.uid);
-
-          // Permissions for sub-admins (unlikely at registration but keep consistent)
-          let permissions = undefined;
-          if (userData?.role === 'sub-admin') {
-            const subAdminData = await subAdminService.getSubAdminById(userCredential.user.uid);
-            if (subAdminData) permissions = subAdminData.permissions;
-          }
-
-          // Create and save session for email-based registration
+          // Register customer via email (custom auth - same pattern as phone)
+          const created = await customerAuthService.registerWithEmail(formData.name, formData.email, formData.phone, formData.password);
+          // Build session for new email-based user
           const emailSession: UserSession = {
-            uid: userCredential.user.uid,
-            email: userCredential.user.email || formData.email || undefined,
-            displayName: userCredential.user.displayName || formData.name,
-            phoneNumber: userData?.phoneNumber,
-            role: userData?.role || 'customer',
+            uid: created.uid,
+            email: formData.email,
+            phoneNumber: formData.phone,
+            displayName: formData.name,
+            role: 'customer',
             sessionToken: SessionManager.generateSessionToken(),
             loginTime: Date.now(),
-            permissions,
           };
           await login(emailSession);
           toast.showRegistrationSuccess();
           setTimeout(() => {
-            if (emailSession.role === 'admin' || emailSession.role === 'sub-admin') {
-              router.replace('/admin');
-            } else if (emailSession.role === 'delivery') {
-              router.replace('/delivery/deliverydashboard');
-            } else {
-              router.replace('/customer/home');
-            }
+            router.replace('/customer/home');
           }, 300);
           return;
         }
-      }
-      // For email-based login (non-registration) where userCredential is defined above
-      if (!usePhoneAuth && isLogin && userCredential) {
-        // Get permissions if user is a sub-admin
-        let permissions = undefined;
-        if (userData?.role === 'sub-admin') {
-          const subAdminData = await subAdminService.getSubAdminById(userCredential.user.uid);
-          if (subAdminData) permissions = subAdminData.permissions;
-        }
-
-        const emailLoginSession: UserSession = {
-          uid: userCredential.user.uid,
-          email: userCredential.user.email || formData.email || undefined,
-          displayName: userCredential.user.displayName || userData?.displayName || formData.name,
-          phoneNumber: userData?.phoneNumber,
-          role: userData?.role || 'customer',
-          sessionToken: SessionManager.generateSessionToken(),
-          loginTime: Date.now(),
-          expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
-          passwordChangedAt: userData?.passwordChangedAt || undefined,
-          permissions,
-        };
-
-        await login(emailLoginSession);
-        toast.showLoginSuccess();
-        setTimeout(() => {
-          if (emailLoginSession.role === 'admin' || emailLoginSession.role === 'sub-admin') {
-            router.replace('/admin');
-          } else if (emailLoginSession.role === 'delivery') {
-            router.replace('/delivery/deliverydashboard');
-          } else {
-            router.replace('/customer/home');
-          }
-        }, 300);
-        return;
       }
     } catch (error: any) {
       console.error('Authentication error:', error);
@@ -353,6 +539,138 @@ export default function AuthScreen() {
     setIsLogin(loginMode);
     resetForm();
   };
+
+  // Forgot password modal functions
+  const handleForgotPasswordPhoneSubmit = async () => {
+    if (!forgotPasswordPhone.trim()) {
+      toast.showError('Validation Error', 'Please enter your phone number.');
+      return;
+    }
+
+    setForgotPasswordIsLoading(true);
+    try {
+      // Find user by phone number
+      const user = await userService.getUserByPhoneNumber(forgotPasswordPhone.trim());
+      
+      if (!user) {
+        toast.showError('User Not Found', 'No account found with this phone number.');
+        return;
+      }
+
+      setFoundUser(user);
+      
+      // Format phone number and send OTP
+      const formattedPhoneNumber = WhatsAppOtpService.formatPhoneNumber(forgotPasswordPhone.trim());
+      await WhatsAppOtpService.sendPasswordResetOTP(formattedPhoneNumber);
+      
+      setForgotPasswordStep('otp');
+      setForgotPasswordCountdown(60); // 60 seconds countdown
+      toast.showOtpSentSuccess();
+    } catch (error: any) {
+      console.error('Error in forgot password:', error);
+      toast.showOtpError(error.message || 'Failed to send OTP. Please try again.');
+    } finally {
+      setForgotPasswordIsLoading(false);
+    }
+  };
+
+  const handleForgotPasswordOtpSubmit = async () => {
+    if (!forgotPasswordOtp.trim() || forgotPasswordOtp.length !== 6) {
+      toast.showInvalidOtpError();
+      return;
+    }
+
+    setForgotPasswordIsLoading(true);
+    try {
+      const formattedPhoneNumber = WhatsAppOtpService.formatPhoneNumber(forgotPasswordPhone.trim());
+      const result = await WhatsAppOtpService.verifyPasswordResetOTP(forgotPasswordOtp, formattedPhoneNumber);
+      
+      if (result.valid) {
+        setForgotPasswordStep('password');
+        toast.showOtpVerifiedSuccess();
+      } else {
+        toast.showError('Invalid OTP', result.message);
+      }
+    } catch (error: any) {
+      console.error('Error verifying OTP:', error);
+      toast.showOtpVerificationError(error.message);
+    } finally {
+      setForgotPasswordIsLoading(false);
+    }
+  };
+
+  const handleForgotPasswordReset = async () => {
+    if (!forgotPasswordNewPassword.trim() || forgotPasswordNewPassword.length < 6) {
+      toast.showInvalidPasswordError();
+      return;
+    }
+
+    if (forgotPasswordNewPassword !== forgotPasswordConfirmPassword) {
+      toast.showPasswordMismatchError();
+      return;
+    }
+
+    setForgotPasswordIsLoading(true);
+    try {
+      console.log('Found user data:', foundUser);
+      
+      // Update password in Firestore using customer auth service
+      if (foundUser?.uid) {
+        await customerAuthService.updateCustomerPassword(foundUser.uid, forgotPasswordNewPassword);
+        console.log('Password updated in Firestore');
+      }
+
+      // Note: Since we're now using custom authentication (same as sub-admin/delivery),
+      // we don't need to update Firebase Auth password anymore. The password is stored
+      // in Firestore and used directly for authentication, just like sub-admin and delivery services.
+
+      toast.showPasswordResetSuccess();
+      
+      // Reset modal state
+      setForgotPasswordModalVisible(false);
+      setForgotPasswordStep('phone');
+      setForgotPasswordPhone('');
+      setForgotPasswordOtp('');
+      setForgotPasswordNewPassword('');
+      setForgotPasswordConfirmPassword('');
+      setFoundUser(null);
+    } catch (error: any) {
+      console.error('Error resetting password:', error);
+      toast.showError('Error', error.message || 'Failed to reset password. Please try again.');
+    } finally {
+      setForgotPasswordIsLoading(false);
+    }
+  };
+
+  const handleForgotPasswordResendOTP = async () => {
+    if (forgotPasswordCountdown > 0) return;
+    
+    try {
+      await handleForgotPasswordPhoneSubmit();
+    } catch {
+      // Error already handled in handleForgotPasswordPhoneSubmit
+    }
+  };
+
+  const resetForgotPasswordModal = () => {
+    setForgotPasswordModalVisible(false);
+    setForgotPasswordStep('phone');
+    setForgotPasswordPhone('');
+    setForgotPasswordOtp('');
+    setForgotPasswordNewPassword('');
+    setForgotPasswordConfirmPassword('');
+    setFoundUser(null);
+    setForgotPasswordCountdown(0);
+  };
+
+  // Countdown effect for forgot password
+  React.useEffect(() => {
+    let timer: number;
+    if (forgotPasswordCountdown > 0) {
+      timer = setTimeout(() => setForgotPasswordCountdown(forgotPasswordCountdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [forgotPasswordCountdown]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
@@ -484,7 +802,10 @@ export default function AuthScreen() {
         </TouchableOpacity>
 
         {isLogin && (
-          <TouchableOpacity style={styles.forgotPassword}>
+          <TouchableOpacity 
+            style={styles.forgotPassword}
+            onPress={() => setForgotPasswordModalVisible(true)}
+          >
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
           </TouchableOpacity>
         )}
@@ -495,6 +816,29 @@ export default function AuthScreen() {
           Secure and reliable gas delivery service
         </Text>
       </View>
+      <ForgotPasswordModal 
+        visible={forgotPasswordModalVisible}
+        onClose={resetForgotPasswordModal}
+        step={forgotPasswordStep}
+        phone={forgotPasswordPhone}
+        onPhoneChange={setForgotPasswordPhone}
+        otp={forgotPasswordOtp}
+        onOtpChange={setForgotPasswordOtp}
+        newPassword={forgotPasswordNewPassword}
+        onNewPasswordChange={setForgotPasswordNewPassword}
+        confirmPassword={forgotPasswordConfirmPassword}
+        onConfirmPasswordChange={setForgotPasswordConfirmPassword}
+        showPassword={forgotPasswordShowPassword}
+        onShowPasswordChange={setForgotPasswordShowPassword}
+        showConfirmPassword={forgotPasswordShowConfirmPassword}
+        onShowConfirmPasswordChange={setForgotPasswordShowConfirmPassword}
+        isLoading={forgotPasswordIsLoading}
+        countdown={forgotPasswordCountdown}
+        onPhoneSubmit={handleForgotPasswordPhoneSubmit}
+        onOtpSubmit={handleForgotPasswordOtpSubmit}
+        onPasswordReset={handleForgotPasswordReset}
+        onResendOtp={handleForgotPasswordResendOTP}
+      />
     </ScrollView>
   );
 }
@@ -669,5 +1013,60 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: Colors.textSecondary,
     textAlign: 'center'
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    width: '80%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  modalContent: {
+    paddingTop: 10,
+  },
+  modalDescription: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  resendButton: {
+    marginTop: 15,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+  },
+  resendButtonText: {
+    color: Colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

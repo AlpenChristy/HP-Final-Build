@@ -8,7 +8,7 @@ const sendOTPFunction = httpsCallable(functions, 'sendOTP');
 const verifyOTPFunction = httpsCallable(functions, 'verifyOTP');
 const verifyPasswordResetOTPFunction = httpsCallable(functions, 'verifyPasswordResetOTP');
 const sendPasswordResetOTPFunction = httpsCallable(functions, 'sendPasswordResetOTP');
-const resetPasswordWithOTPFunction = httpsCallable(functions, 'resetPasswordWithOTP');
+
 
 export interface OTPResponse {
   success: boolean;
@@ -21,10 +21,7 @@ export interface OTPVerificationResponse {
   message: string;
 }
 
-export interface PasswordResetResponse {
-  success: boolean;
-  message: string;
-}
+
 
 export class WhatsAppOtpService {
   /**
@@ -106,33 +103,7 @@ export class WhatsAppOtpService {
     }
   }
 
-  /**
-   * Reset password using OTP verification
-   * @param otp - The OTP received
-   * @param newPassword - New password to set
-   * @param phoneNumber - Phone number in international format
-   * @returns Promise<PasswordResetResponse>
-   */
-  static async resetPasswordWithOTP(
-    otp: string, 
-    newPassword: string, 
-    phoneNumber: string
-  ): Promise<PasswordResetResponse> {
-    try {
-      console.log('WhatsAppOtpService.resetPasswordWithOTP called with:', { otp, phoneNumber });
-      
-      const data = { otp, newPassword, phoneNumber };
 
-      console.log('Calling Firebase function with data:', data);
-      const result = await resetPasswordWithOTPFunction(data);
-      console.log('Firebase function result:', result.data);
-      
-      return result.data as PasswordResetResponse;
-    } catch (error: any) {
-      console.error('Error resetting password with OTP:', error);
-      throw new Error(error.message || 'Failed to reset password');
-    }
-  }
 
   /**
    * Format phone number to international format
