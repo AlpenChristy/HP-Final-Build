@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
-import { updateEmail } from 'firebase/auth';
-import { ArrowLeft, Bell, ChevronRight, Edit, HelpCircle, Lock, LogOut, Mail, MapPin, Phone, Tag, Trash2, Truck, User, X } from 'lucide-react-native';
+import { updateEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
+import { ArrowLeft, Bell, ChevronRight, Edit, HelpCircle, Lock, LogOut, Mail, MapPin, Phone, Tag, Trash2, Truck, User, X, Eye, EyeOff } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
+import { WhatsAppOtpService } from '../../core/services/whatsappOtpService';
 import { createToastHelpers } from '../../core/utils/toastUtils';
 
 // --- Color Palette (Matched with other pages) ---
@@ -381,41 +382,437 @@ const HelpSupportContent = () => (
     </View>
 );
 
-const ChangePasswordContent = ({ onForgotPassword }) => (
+const ChangePasswordContent = ({ onForgotPassword }) => {
+    const { userSession } = useAuth();
+    const toast = createToastHelpers();
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+    const handleChangePassword = async () => {
+        // Validation
+        if (!currentPassword.trim()) {
+            toast.showError('Validation Error', 'Please enter your current password.');
+            return;
+        }
+
+        if (!newPassword.trim() || newPassword.length < 6) {
+            toast.showError('Validation Error', 'New password must be at least 6 characters long.');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            toast.showError('Validation Error', 'New passwords do not match.');
+            return;
+        }
+
+        if (currentPassword === newPassword) {
+            toast.showError('Validation Error', 'New password must be different from current password.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const currentUser = FIREBASE_AUTH.currentUser;
+            if (!currentUser || !currentUser.email) {
+                throw new Error('User not authenticated or email not available');
+            }
+
+            // Re-authenticate user with current password
+            const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+            await reauthenticateWithCredential(currentUser, credential);
+
+            // Update password in Firebase Auth
+            await updatePassword(currentUser, newPassword);
+
+            // Update password in Firestore
+            if (userSession?.uid) {
+                await userService.updateUserPassword(userSession.uid, newPassword);
+            }
+
+            toast.showSuccess('Success', 'Password updated successfully!');
+            
+            // Clear form
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+
+        } catch (error: any) {
+            console.error('Error changing password:', error);
+            
+            if (error.code === 'auth/wrong-password') {
+                toast.showError('Error', 'Current password is incorrect.');
+            } else if (error.code === 'auth/weak-password') {
+                toast.showError('Error', 'New password is too weak. Please choose a stronger password.');
+            } else {
+                toast.showError('Error', error.message || 'Failed to update password. Please try again.');
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
     <View>
         <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Current Password</Text>
-            <TextInput style={styles.input} secureTextEntry />
+                <View style={styles.passwordInputContainer}>
+                    <TextInput 
+                        style={styles.passwordInput}
+                        value={currentPassword}
+                        onChangeText={setCurrentPassword}
+                        placeholder="Enter current password"
+                        secureTextEntry={!showCurrentPassword}
+                        editable={!isLoading}
+                    />
+                    <TouchableOpacity 
+                        style={styles.eyeButton}
+                        onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                    >
+                        {showCurrentPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+                    </TouchableOpacity>
+                </View>
         </View>
         <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>New Password</Text>
-            <TextInput style={styles.input} secureTextEntry />
+                <View style={styles.passwordInputContainer}>
+                    <TextInput 
+                        style={styles.passwordInput}
+                        value={newPassword}
+                        onChangeText={setNewPassword}
+                        placeholder="Enter new password"
+                        secureTextEntry={!showNewPassword}
+                        editable={!isLoading}
+                    />
+                    <TouchableOpacity 
+                        style={styles.eyeButton}
+                        onPress={() => setShowNewPassword(!showNewPassword)}
+                    >
+                        {showNewPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+                    </TouchableOpacity>
+                </View>
         </View>
         <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Confirm New Password</Text>
-            <TextInput style={styles.input} secureTextEntry />
+                <View style={styles.passwordInputContainer}>
+                    <TextInput 
+                        style={styles.passwordInput}
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                        placeholder="Confirm new password"
+                        secureTextEntry={!showConfirmPassword}
+                        editable={!isLoading}
+                    />
+                    <TouchableOpacity 
+                        style={styles.eyeButton}
+                        onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                        {showConfirmPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+                    </TouchableOpacity>
+                </View>
         </View>
         <TouchableOpacity style={styles.forgotPasswordButton} onPress={onForgotPassword}>
             <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.addButton}>
-            <Text style={styles.addButtonText}>Update Password</Text>
+            <TouchableOpacity 
+                style={[styles.addButton, isLoading && { opacity: 0.7 }]}
+                onPress={handleChangePassword}
+                disabled={isLoading}
+            >
+                <Text style={styles.addButtonText}>
+                    {isLoading ? 'Updating Password...' : 'Update Password'}
+                </Text>
         </TouchableOpacity>
     </View>
 );
+};
 
-const ForgotPasswordContent = () => (
+const ForgotPasswordContent = () => {
+    const { userSession } = useAuth();
+    const [otp, setOtp] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [step, setStep] = useState<'verify' | 'otp' | 'password'>('verify');
+    const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [countdown, setCountdown] = useState(0);
+    const [userPhoneNumber, setUserPhoneNumber] = useState<string>('');
+    const toast = createToastHelpers();
+
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        if (countdown > 0) {
+            timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+        }
+        return () => clearTimeout(timer);
+    }, [countdown]);
+
+    // Fetch user data when component mounts
+    useEffect(() => {
+        const fetchUserData = async () => {
+            if (!userSession?.uid) {
+                console.log('No user session found');
+                return;
+            }
+
+            try {
+                console.log('Fetching user data for UID:', userSession.uid);
+                const user = await userService.getUserById(userSession.uid);
+                console.log('User data fetched:', user);
+                
+                if (user) {
+                    setUserPhoneNumber(user.phoneNumber || user.mobile || '');
+                    console.log('Phone number set:', user.phoneNumber || user.mobile);
+                }
+            } catch (error) {
+                console.error('Error fetching user data:', error);
+                toast.showError('Error', 'Failed to fetch user data. Please try again.');
+            }
+        };
+
+        fetchUserData();
+    }, [userSession?.uid]);
+
+    const handleSendOTP = async () => {
+        if (!userPhoneNumber) {
+            console.log('No phone number available');
+            toast.showError('Error', 'No phone number found for your account.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            console.log('Sending OTP to phone:', userPhoneNumber);
+            
+            // Format phone number
+            const formattedPhoneNumber = WhatsAppOtpService.formatPhoneNumber(userPhoneNumber);
+            console.log('Formatted phone number:', formattedPhoneNumber);
+
+            await WhatsAppOtpService.sendPasswordResetOTP(formattedPhoneNumber);
+            setStep('otp');
+            setCountdown(60); // 60 seconds countdown
+            toast.showOtpSentSuccess();
+            console.log('OTP sent successfully');
+        } catch (error: any) {
+            console.error('Error sending OTP:', error);
+            toast.showOtpError(error.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleVerifyOTP = async () => {
+        if (!otp.trim() || otp.length !== 6) {
+            toast.showInvalidOtpError();
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            console.log('Verifying OTP:', otp);
+            console.log('Using phone:', userPhoneNumber);
+            
+            // Format phone number
+            const formattedPhoneNumber = WhatsAppOtpService.formatPhoneNumber(userPhoneNumber);
+            console.log('Formatted phone number for verification:', formattedPhoneNumber);
+
+            // Verify OTP for password reset
+            const result = await WhatsAppOtpService.verifyPasswordResetOTP(otp, formattedPhoneNumber);
+            console.log('OTP verification result:', result);
+            
+            if (result.valid) {
+                setStep('password');
+                toast.showOtpVerifiedSuccess();
+                console.log('OTP verified successfully');
+            } else {
+                toast.showError('Invalid OTP', result.message);
+                console.log('OTP verification failed:', result.message);
+            }
+        } catch (error: any) {
+            console.error('Error verifying OTP:', error);
+            toast.showOtpVerificationError(error.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleResetPassword = async () => {
+        if (!newPassword.trim() || newPassword.length < 6) {
+            toast.showInvalidPasswordError();
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            toast.showPasswordMismatchError();
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            console.log('Resetting password with OTP:', otp);
+            console.log('Using phone:', userPhoneNumber);
+            
+            // Format phone number
+            const formattedPhoneNumber = WhatsAppOtpService.formatPhoneNumber(userPhoneNumber);
+            console.log('Formatted phone number for password reset:', formattedPhoneNumber);
+
+            await WhatsAppOtpService.resetPasswordWithOTP(otp, newPassword, formattedPhoneNumber);
+            toast.showPasswordResetSuccess();
+            console.log('Password reset successfully');
+            
+            // Reset form
+            setOtp('');
+            setNewPassword('');
+            setConfirmPassword('');
+            setStep('verify');
+        } catch (error: any) {
+            console.error('Error resetting password:', error);
+            toast.showPasswordResetError(error.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleResendOTP = async () => {
+        if (countdown > 0) return;
+        
+        try {
+            await handleSendOTP();
+        } catch (error) {
+            // Error already handled in handleSendOTP
+        }
+    };
+
+        if (step === 'verify') {
+        return (
     <View>
-        <Text style={styles.infoValue}>Enter your registered email or mobile number to receive a password reset link.</Text>
+                <Text style={styles.infoValue}>
+                    Click the button below to receive a password reset OTP via WhatsApp on your registered number.
+                </Text>
+                {userPhoneNumber && (
         <View style={[styles.infoRow, {marginTop: 20}]}>
-            <Text style={styles.infoLabel}>Email / Mobile Number</Text>
-            <TextInput style={styles.input} />
+                        <Text style={styles.infoLabel}>Registered Phone Number</Text>
+                        <Text style={styles.infoValue}>{userPhoneNumber}</Text>
         </View>
-        <TouchableOpacity style={styles.addButton}>
-            <Text style={styles.addButtonText}>Send Reset Link</Text>
+                )}
+                <TouchableOpacity 
+                    style={[styles.addButton, isLoading && { opacity: 0.7 }]}
+                    onPress={handleSendOTP}
+                    disabled={isLoading}
+                >
+                    <Text style={styles.addButtonText}>
+                        {isLoading ? 'Sending OTP...' : 'Verify using OTP'}
+                    </Text>
         </TouchableOpacity>
     </View>
 );
+    }
+
+    if (step === 'otp') {
+        return (
+            <View>
+                <Text style={styles.infoValue}>
+                    Enter the 6-digit OTP sent to your WhatsApp.
+                </Text>
+                <View style={[styles.infoRow, {marginTop: 20}]}>
+                    <Text style={styles.infoLabel}>OTP</Text>
+                    <TextInput 
+                        style={styles.input}
+                        value={otp}
+                        onChangeText={setOtp}
+                        placeholder="Enter 6-digit OTP"
+                        keyboardType="numeric"
+                        maxLength={6}
+                        editable={!isLoading}
+                    />
+                </View>
+                <TouchableOpacity 
+                    style={[styles.addButton, isLoading && { opacity: 0.7 }]}
+                    onPress={handleVerifyOTP}
+                    disabled={isLoading}
+                >
+                    <Text style={styles.addButtonText}>
+                        {isLoading ? 'Verifying...' : 'Verify OTP'}
+                    </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                    style={[styles.resendButton, countdown > 0 && { opacity: 0.5 }]}
+                    onPress={handleResendOTP}
+                    disabled={countdown > 0 || isLoading}
+                >
+                    <Text style={styles.resendButtonText}>
+                        {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    if (step === 'password') {
+        return (
+            <View>
+                <Text style={styles.infoValue}>
+                    Enter your new password.
+                </Text>
+                <View style={[styles.infoRow, {marginTop: 20}]}>
+                    <Text style={styles.infoLabel}>New Password</Text>
+                    <View style={styles.passwordInputContainer}>
+                        <TextInput 
+                            style={styles.passwordInput}
+                            value={newPassword}
+                            onChangeText={setNewPassword}
+                            placeholder="Enter new password"
+                            secureTextEntry={!showPassword}
+                            editable={!isLoading}
+                        />
+                        <TouchableOpacity 
+                            style={styles.eyeButton}
+                            onPress={() => setShowPassword(!showPassword)}
+                        >
+                            {showPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+                <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Confirm Password</Text>
+                    <View style={styles.passwordInputContainer}>
+                        <TextInput 
+                            style={styles.passwordInput}
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                            placeholder="Confirm new password"
+                            secureTextEntry={!showConfirmPassword}
+                            editable={!isLoading}
+                        />
+                        <TouchableOpacity 
+                            style={styles.eyeButton}
+                            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                        >
+                            {showConfirmPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+                <TouchableOpacity 
+                    style={[styles.addButton, isLoading && { opacity: 0.7 }]}
+                    onPress={handleResetPassword}
+                    disabled={isLoading}
+                >
+                    <Text style={styles.addButtonText}>
+                        {isLoading ? 'Resetting Password...' : 'Reset Password'}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    return null;
+};
 
 
 export default function ProfileScreen() {
@@ -1206,6 +1603,35 @@ const styles = StyleSheet.create({
       fontFamily: 'Inter_400Regular',
       color: Colors.textSecondary,
       textAlign: 'center',
+  },
+  // Password reset styles
+  resendButton: {
+      alignSelf: 'center',
+      paddingVertical: 12,
+      marginTop: 16,
+  },
+  resendButtonText: {
+      color: Colors.primary,
+      fontFamily: 'Inter_500Medium',
+      fontSize: 14,
+  },
+  passwordInputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: Colors.border,
+      borderRadius: 8,
+      backgroundColor: Colors.white,
+  },
+  passwordInput: {
+      flex: 1,
+      fontSize: 16,
+      fontFamily: 'Inter_500Medium',
+      color: Colors.text,
+      padding: 12,
+  },
+  eyeButton: {
+      padding: 12,
   },
 
 });

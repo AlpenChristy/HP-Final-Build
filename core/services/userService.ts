@@ -11,6 +11,7 @@ export interface UserData {
   phoneNumber?: string;
   address?: string;
   consumerNumber?: string;
+  password?: string; // Password field for Firestore
   passwordChangedAt?: number; // Timestamp when password was last changed
   createdAt: number;
   updatedAt: number;
@@ -70,6 +71,16 @@ export const userService = {
     const userRef = doc(FIREBASE_DB, 'users', uid);
     await updateDoc(userRef, {
       role,
+      updatedAt: Date.now(),
+    });
+  },
+  
+  // Update user password in Firestore
+  async updateUserPassword(uid: string, password: string): Promise<void> {
+    const userRef = doc(FIREBASE_DB, 'users', uid);
+    await updateDoc(userRef, {
+      password,
+      passwordChangedAt: Date.now(),
       updatedAt: Date.now(),
     });
   }

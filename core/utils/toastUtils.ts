@@ -292,5 +292,46 @@ export const createToastHelpers = () => {
     showInvalidPhoneFormat: () => {
       toast.showError('Invalid Phone', 'Please enter a valid 10-digit phone number.');
     },
+
+    // WhatsApp OTP specific messages
+    showOtpSentSuccess: () => {
+      toast.showSuccess('OTP Sent', 'Password reset OTP has been sent to your WhatsApp.');
+    },
+
+    showOtpVerifiedSuccess: () => {
+      toast.showSuccess('OTP Verified', 'Please enter your new password.');
+    },
+
+    showPasswordResetSuccess: () => {
+      toast.showSuccess('Password Reset', 'Your password has been reset successfully.');
+    },
+
+    showOtpError: (message?: string) => {
+      toast.showError('OTP Error', message || 'Failed to send OTP. Please try again.');
+    },
+
+    showOtpVerificationError: (message?: string) => {
+      toast.showError('Verification Error', message || 'Failed to verify OTP.');
+    },
+
+    showPasswordResetError: (message?: string) => {
+      toast.showError('Reset Error', message || 'Failed to reset password.');
+    },
+
+    showInvalidOtpError: () => {
+      toast.showError('Invalid OTP', 'Please enter a valid 6-digit OTP.');
+    },
+
+    showPasswordMismatchError: () => {
+      toast.showError('Password Mismatch', 'Passwords do not match.');
+    },
+
+    showInvalidPasswordError: () => {
+      toast.showError('Invalid Password', 'Password must be at least 6 characters long.');
+    },
+
+    showUserNotFoundError: () => {
+      toast.showError('User Not Found', 'No account found with this email or phone number.');
+    },
   };
 };
