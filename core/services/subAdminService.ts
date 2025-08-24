@@ -284,24 +284,26 @@ export const subAdminService = {
       const email = userData.email;
       const oldPassword = userData.password;
       
-      if (!email || !oldPassword) {
-        throw new Error('Email or password not found in user data');
+      if (!oldPassword) {
+        throw new Error('Password not found in user data');
       }
 
-      // 2. Update Firebase Auth password using secondary auth FIRST
-      try {
-        // Sign in with old password to get current user
-        await signInWithEmailAndPassword(secondaryAuth, email, oldPassword);
-        
-        // Update password in Firebase Auth
-        if (secondaryAuth.currentUser) {
-          await (secondaryAuth.currentUser as any).updatePassword(newPassword);
+      // 2. Update Firebase Auth password using secondary auth FIRST (only if email exists)
+      if (email) {
+        try {
+          // Sign in with old password to get current user
+          await signInWithEmailAndPassword(secondaryAuth, email, oldPassword);
+          
+          // Update password in Firebase Auth
+          if (secondaryAuth.currentUser) {
+            await (secondaryAuth.currentUser as any).updatePassword(newPassword);
+          }
+        } catch (authError) {
+          console.warn('Warning: Failed to update Firebase Auth password:', authError);
+          // Continue anyway as the Firestore update is more important for session invalidation
+        } finally {
+          try { await signOut(secondaryAuth); } catch {}
         }
-      } catch (authError) {
-        console.warn('Warning: Failed to update Firebase Auth password:', authError);
-        // Continue anyway as the Firestore update is more important for session invalidation
-      } finally {
-        try { await signOut(secondaryAuth); } catch {}
       }
 
       // 3. Update the password and passwordChangedAt timestamp in Firestore
@@ -445,15 +447,10 @@ export const subAdminService = {
         }
       }
 
-      // Instead of deleting the document, mark it as inactive
-      // This prevents the "email already in use" error while preserving data
-      await updateDoc(userRef, {
-        isActive: false,
-        deletedAt: Date.now(),
-        updatedAt: Date.now(),
-      });
+      // Delete the document from Firestore
+      await deleteDoc(userRef);
       
-      console.log(`Sub-admin ${uid} marked as inactive successfully`);
+      console.log(`Sub-admin ${uid} deleted successfully`);
     } catch (error) {
       console.error('Error deleting sub-admin:', error);
       throw error;
