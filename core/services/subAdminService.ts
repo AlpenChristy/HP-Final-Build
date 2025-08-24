@@ -328,26 +328,40 @@ export const subAdminService = {
     }
   },
 
-  // Check if email already exists in the database
+  // Check if email already exists in the database (only for active users)
   async checkEmailExists(email: string): Promise<boolean> {
     try {
       const usersRef = collection(FIREBASE_DB, 'users');
       const q = query(usersRef, where('email', '==', email));
       const snapshot = await getDocs(q);
-      return !snapshot.empty;
+      
+      // Only consider active users (not deleted ones)
+      const activeUser = snapshot.docs.find(doc => {
+        const data = doc.data();
+        return data.isActive !== false; // Consider user active if isActive is true or undefined
+      });
+      
+      return !!activeUser;
     } catch (error) {
       console.error('Error checking email existence:', error);
       throw new Error('Failed to validate email uniqueness');
     }
   },
 
-  // Check if phone number already exists in the database
+  // Check if phone number already exists in the database (only for active users)
   async checkPhoneExists(phone: string): Promise<boolean> {
     try {
       const usersRef = collection(FIREBASE_DB, 'users');
       const q = query(usersRef, where('phoneNumber', '==', phone));
       const snapshot = await getDocs(q);
-      return !snapshot.empty;
+      
+      // Only consider active users (not deleted ones)
+      const activeUser = snapshot.docs.find(doc => {
+        const data = doc.data();
+        return data.isActive !== false; // Consider user active if isActive is true or undefined
+      });
+      
+      return !!activeUser;
     } catch (error) {
       console.error('Error checking phone existence:', error);
       throw new Error('Failed to validate phone uniqueness');
@@ -366,8 +380,11 @@ export const subAdminService = {
       const q = query(usersRef, where('phoneNumber', '==', phone));
       const snapshot = await getDocs(q);
       
-      // Check if any user other than the excluded one has this phone number
-      const conflictingUser = snapshot.docs.find(doc => doc.id !== excludeUid);
+      // Check if any active user other than the excluded one has this phone number
+      const conflictingUser = snapshot.docs.find(doc => {
+        const data = doc.data();
+        return doc.id !== excludeUid && data.isActive !== false; // Only consider active users
+      });
       return !!conflictingUser;
     } catch (error) {
       console.error('Error checking phone existence excluding user:', error);
@@ -387,8 +404,11 @@ export const subAdminService = {
       const q = query(usersRef, where('email', '==', email));
       const snapshot = await getDocs(q);
       
-      // Check if any user other than the excluded one has this email
-      const conflictingUser = snapshot.docs.find(doc => doc.id !== excludeUid);
+      // Check if any active user other than the excluded one has this email
+      const conflictingUser = snapshot.docs.find(doc => {
+        const data = doc.data();
+        return doc.id !== excludeUid && data.isActive !== false; // Only consider active users
+      });
       return !!conflictingUser;
     } catch (error) {
       console.error('Error checking email existence excluding user:', error);
@@ -415,14 +435,25 @@ export const subAdminService = {
             }
           } catch (authErr) {
             console.warn('Warning: Failed to delete Firebase Auth user for sub-admin:', authErr);
+            
+            // If we can't sign in with stored password, the Firebase Auth user will remain
+            // This is expected behavior when passwords have been changed
+            console.log('Firebase Auth user could not be deleted - this is normal if password was changed');
           } finally {
             try { await signOut(secondaryAuth); } catch {}
           }
         }
       }
 
-      // Delete Firestore user document
-      await deleteDoc(userRef);
+      // Instead of deleting the document, mark it as inactive
+      // This prevents the "email already in use" error while preserving data
+      await updateDoc(userRef, {
+        isActive: false,
+        deletedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      
+      console.log(`Sub-admin ${uid} marked as inactive successfully`);
     } catch (error) {
       console.error('Error deleting sub-admin:', error);
       throw error;
@@ -443,5 +474,57 @@ export const subAdminService = {
     if (permissions.delivery) allowedScreens.push('delivery');
     
     return allowedScreens;
+  },
+
+  // Clean up inactive sub-admins (for admin use)
+  async cleanupInactiveSubAdmins(): Promise<{ success: number; failed: number }> {
+    try {
+      const usersRef = collection(FIREBASE_DB, 'users');
+      const q = query(
+        usersRef,
+        where('role', '==', 'sub-admin'),
+        where('isActive', '==', false)
+      );
+      
+      const snapshot = await getDocs(q);
+      let successCount = 0;
+      let failedCount = 0;
+      
+      for (const doc of snapshot.docs) {
+        try {
+          const data = doc.data() as any;
+          const email = data.email;
+          const password = data.password;
+          
+          // Try to delete Firebase Auth user
+          if (email && password) {
+            try {
+              await signInWithEmailAndPassword(secondaryAuth, email, password);
+              if (secondaryAuth.currentUser) {
+                await deleteUser(secondaryAuth.currentUser);
+                successCount++;
+              }
+            } catch (authErr) {
+              console.warn(`Failed to delete Auth user for ${email}:`, authErr);
+              failedCount++;
+            } finally {
+              try { await signOut(secondaryAuth); } catch {}
+            }
+          }
+          
+          // Delete the Firestore document
+          await deleteDoc(doc.ref);
+          
+        } catch (error) {
+          console.error(`Error cleaning up sub-admin ${doc.id}:`, error);
+          failedCount++;
+        }
+      }
+      
+      return { success: successCount, failed: failedCount };
+    } catch (error) {
+      console.error('Error cleaning up inactive sub-admins:', error);
+      throw error;
+    }
   },
 };

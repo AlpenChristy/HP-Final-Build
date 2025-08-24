@@ -859,14 +859,18 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
             <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Email <Text style={styles.optionalText}>(Optional if phone provided)</Text></Text>
                 <TextInput 
-                    style={styles.input} 
+                    style={[styles.input, (editingAdmin && editingAdmin.email) ? styles.disabledInput : null]} 
                     value={formData.email} 
                     onChangeText={text => setFormData({...formData, email: text})} 
                     placeholder="Enter email address" 
                     keyboardType="email-address" 
                     autoCapitalize="none"
+                    editable={!editingAdmin || !editingAdmin.email}
                 />
                 <Text style={styles.helpText}>Format: user@example.com</Text>
+                {editingAdmin && editingAdmin.email && (
+                    <Text style={styles.disabledNote}>Email cannot be changed once set</Text>
+                )}
             </View>
             {!editingAdmin ? (
                 <View style={styles.inputGroup}>
@@ -1069,13 +1073,15 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const handleDeleteSubAdmin = async (uid: string) => {
     try {
       await subAdminService.deleteSubAdmin(uid);
-      Alert.alert('Success', 'Sub-admin permanently deleted.');
+      Alert.alert('Success', 'Sub-admin marked as inactive and removed from the list.');
       await loadSubAdmins();
     } catch (error) {
       console.error('Error deleting sub-admin:', error);
       Alert.alert('Error', 'Failed to delete sub-admin. Please try again.');
     }
   };
+
+
 
   const handleChangeSubAdminPassword = (admin: SubAdminData) => {
     setSubAdminToChangePassword(admin);
@@ -1709,6 +1715,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontStyle: 'italic',
   },
+  disabledNote: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.red,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
   helpNote: {
     backgroundColor: Colors.primaryLighter,
     padding: 12,
@@ -1737,6 +1750,11 @@ const styles = StyleSheet.create({
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  disabledInput: {
+    backgroundColor: Colors.border,
+    color: Colors.textSecondary,
+    opacity: 0.7,
   },
   saveButton: {
     backgroundColor: Colors.primary,
@@ -1826,6 +1844,7 @@ const styles = StyleSheet.create({
   passwordButton: {
     backgroundColor: Colors.yellow,
   },
+
   warningBox: {
     backgroundColor: Colors.redLighter,
     padding: 16,
