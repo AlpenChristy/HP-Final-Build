@@ -24,7 +24,6 @@ const products = [
     weight: 14.2,
     price: 850,
     originalPrice: 900,
-    deliveryCharge: 30,
     description: 'A standard domestic cooking gas cylinder, perfect for everyday kitchen use. Reliable, safe, and delivered to your doorstep.',
     image: 'https://your-storage-url.com/gas-cylinder.jpg', // Replace with actual URL after uploading
     inStock: true,
@@ -35,7 +34,6 @@ const products = [
     weight: 19,
     price: 1200,
     originalPrice: 1250,
-    deliveryCharge: 50,
     description: 'A commercial-grade gas cylinder designed for restaurants, hotels, and other high-demand businesses.',
     image: 'https://your-storage-url.com/gas-cylinder.jpg', // Replace with actual URL after uploading
     inStock: true,
@@ -46,7 +44,6 @@ const products = [
     weight: 5,
     price: 450,
     originalPrice: 55,
-    deliveryCharge: 20,
     description: 'A small and portable cylinder, ideal for outdoor activities, camping trips, and small-scale cooking needs.',
     image: 'https://your-storage-url.com/gas-cylinder.jpg', // Replace with actual URL after uploading
     inStock: false,
@@ -58,7 +55,6 @@ const products = [
     weight: 14.2,
     price: 950,
     originalPrice: 1000,
-    deliveryCharge: 30,
     description: 'Standard domestic cooking gas cylinder for everyday kitchen use.',
     image: 'https://your-storage-url.com/gas-cylinder.jpg', // Replace with actual URL
     inStock: true,

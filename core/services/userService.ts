@@ -13,6 +13,8 @@ export interface UserData {
   consumerNumber?: string;
   password?: string; // Password field for Firestore
   passwordChangedAt?: number; // Timestamp when password was last changed
+  lastLoginAt?: number; // Timestamp when user last logged in
+  isActive?: boolean; // Whether the user account is active
   createdAt: number;
   updatedAt: number;
 }
@@ -105,6 +107,24 @@ export const userService = {
     } catch (error) {
       console.error('Error finding user by phone number:', error);
       return null;
+    }
+  },
+
+  // Get all users
+  async getAllUsers(): Promise<UserData[]> {
+    try {
+      const usersQuery = query(collection(FIREBASE_DB, 'users'));
+      const usersSnapshot = await getDocs(usersQuery);
+      
+      const users: UserData[] = [];
+      usersSnapshot.forEach((doc) => {
+        users.push({ uid: doc.id, ...doc.data() } as UserData);
+      });
+      
+      return users;
+    } catch (error) {
+      console.error('Error getting all users:', error);
+      return [];
     }
   }
 };

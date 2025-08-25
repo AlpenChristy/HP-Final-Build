@@ -367,8 +367,15 @@ const HelpSupportContent = () => (
         <TouchableOpacity style={styles.helpRow}>
             <Phone size={20} color={Colors.primary} />
             <View style={styles.helpTextContainer}>
-                <Text style={styles.helpText}>Call Customer Support</Text>
-                <Text style={styles.helpSubText}>+91 9428071451</Text>
+                <Text style={styles.helpText}>Office Line 1</Text>
+                <Text style={styles.helpSubText}>02662-222724</Text>
+            </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.helpRow}>
+            <Phone size={20} color={Colors.primary} />
+            <View style={styles.helpTextContainer}>
+                <Text style={styles.helpText}>Office Line 2</Text>
+                <Text style={styles.helpSubText}>02662-222788</Text>
             </View>
         </TouchableOpacity>
         <TouchableOpacity style={styles.helpRow}>

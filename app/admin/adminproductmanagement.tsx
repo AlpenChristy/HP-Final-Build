@@ -1,14 +1,15 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Camera, Edit, Plus, Search, Trash2, UploadCloud, X } from 'lucide-react-native';
+import { ArrowLeft, Camera, Edit, Plus, Search, Trash2, UploadCloud, X, AlertTriangle, Check } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Import services
 import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { pickImage, takePhoto, uploadToCloudinary } from '../../core/services/cloudinaryService';
 import { Product, addProduct, deleteProduct, getProducts, updateProduct } from '../../core/services/productService';
+import Toast from '../../components/ui/Toast';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -37,6 +38,20 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  // Custom modal states
+  const [imagePickerModalVisible, setImagePickerModalVisible] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  
+  // Toast state
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [toastTitle, setToastTitle] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+
   const [formData, setFormData] = useState({
     name: '',
     type: 'gas',
@@ -56,6 +71,13 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
     loadProducts();
   }, []);
 
+  const showToast = (type: 'success' | 'error', title: string, message: string) => {
+    setToastType(type);
+    setToastTitle(title);
+    setToastMessage(message);
+    setToastVisible(true);
+  };
+
   const loadProducts = async () => {
     try {
       setLoading(true);
@@ -63,7 +85,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
       setProducts(productsData);
     } catch (error) {
       console.error('Error loading products:', error);
-      Alert.alert('Error', 'Failed to load products');
+      showToast('error', 'Error', 'Failed to load products');
     } finally {
       setLoading(false);
     }
@@ -105,22 +127,13 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
   };
 
   const handleImagePicker = () => {
-    Alert.alert(
-      'Select Image',
-      'Choose how you want to select an image',
-      [
-        { text: 'Camera (Full)', onPress: () => handleTakePhoto(false) },
-        { text: 'Camera (Crop)', onPress: () => handleTakePhoto(true) },
-        { text: 'Gallery (Full)', onPress: () => handlePickImage(false) },
-        { text: 'Gallery (Crop)', onPress: () => handlePickImage(true) },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    setImagePickerModalVisible(true);
   };
 
   const handlePickImage = async (allowsEditing: boolean = false) => {
     try {
       setUploadingImage(true);
+      setImagePickerModalVisible(false);
       const imageAsset = await pickImage({ allowsEditing, aspect: allowsEditing ? [4, 3] : undefined });
       if (imageAsset) {
         const imageUrl = await uploadToCloudinary(imageAsset.uri);
@@ -128,7 +141,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
+      showToast('error', 'Error', 'Failed to pick image');
     } finally {
       setUploadingImage(false);
     }
@@ -137,6 +150,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
   const handleTakePhoto = async (allowsEditing: boolean = false) => {
     try {
       setUploadingImage(true);
+      setImagePickerModalVisible(false);
       const imageAsset = await takePhoto({ allowsEditing, aspect: allowsEditing ? [4, 3] : undefined });
       if (imageAsset) {
         const imageUrl = await uploadToCloudinary(imageAsset.uri);
@@ -144,7 +158,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
       }
     } catch (error) {
       console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo');
+      showToast('error', 'Error', 'Failed to take photo');
     } finally {
       setUploadingImage(false);
     }
@@ -152,15 +166,18 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
 
   const validateForm = () => {
     if (!formData.name.trim()) {
-      Alert.alert('Error', 'Product name is required');
+      setErrorMessage('Product name is required');
+      setErrorModalVisible(true);
       return false;
     }
     if (!formData.price.trim()) {
-      Alert.alert('Error', 'Price is required');
+      setErrorMessage('Price is required');
+      setErrorModalVisible(true);
       return false;
     }
     if (!selectedImage) {
-      Alert.alert('Error', 'Product image is required');
+      setErrorMessage('Product image is required');
+      setErrorModalVisible(true);
       return false;
     }
     return true;
@@ -186,11 +203,11 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
       if (editingProduct) {
         // Update existing product
         await updateProduct(editingProduct.id!, productData);
-        Alert.alert('Success', 'Product updated successfully');
+        showToast('success', 'Success', 'Product updated successfully');
       } else {
         // Add new product
         await addProduct(productData);
-        Alert.alert('Success', 'Product added successfully');
+        showToast('success', 'Success', 'Product added successfully');
       }
 
       // Reload products
@@ -198,34 +215,31 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
       closeModal();
     } catch (error) {
       console.error('Error saving product:', error);
-      Alert.alert('Error', 'Failed to save product');
+      showToast('error', 'Error', 'Failed to save product');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (productId: string) => {
-    Alert.alert(
-      'Delete Product',
-      'Are you sure you want to delete this product?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteProduct(productId);
-              Alert.alert('Success', 'Product deleted successfully');
-              await loadProducts();
-            } catch (error) {
-              console.error('Error deleting product:', error);
-              Alert.alert('Error', 'Failed to delete product');
-            }
-          },
-        },
-      ]
-    );
+  const handleDelete = async (product: Product) => {
+    setProductToDelete(product);
+    setDeleteModalVisible(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!productToDelete) return;
+    
+    try {
+      await deleteProduct(productToDelete.id!);
+      showToast('success', 'Success', 'Product deleted successfully');
+      await loadProducts();
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      showToast('error', 'Error', 'Failed to delete product');
+    } finally {
+      setDeleteModalVisible(false);
+      setProductToDelete(null);
+    }
   };
 
   if (!fontsLoaded) {
@@ -313,7 +327,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
                           </TouchableOpacity>
                           <TouchableOpacity 
                               style={[styles.actionButton, styles.deleteButton]}
-                              onPress={() => handleDelete(product.id!)}
+                              onPress={() => handleDelete(product)}
                           >
                               <Trash2 size={18} color={Colors.red} />
                           </TouchableOpacity>
@@ -325,8 +339,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
         )}
       </ScrollView>
 
-
-
+      {/* Main Product Modal */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -392,8 +405,6 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
                       placeholderTextColor="#94A3B8"
                     />
                   </View>
-
-
 
                   <View style={styles.inputGroup}>
                     <Text style={styles.inputLabel}>Price (₹) *</Text>
@@ -496,6 +507,137 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
           </View>
         </View>
       </Modal>
+
+      {/* Image Picker Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={imagePickerModalVisible}
+        onRequestClose={() => setImagePickerModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.centeredModal}>
+            <View style={styles.imagePickerModal}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Image</Text>
+                <TouchableOpacity onPress={() => setImagePickerModalVisible(false)}>
+                  <X size={24} color={Colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.imagePickerOptions}>
+                <TouchableOpacity 
+                  style={styles.imagePickerOption}
+                  onPress={() => handleTakePhoto(false)}
+                >
+                  <Camera size={24} color={Colors.primary} />
+                  <Text style={styles.imagePickerOptionText}>Camera (Full)</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.imagePickerOption}
+                  onPress={() => handleTakePhoto(true)}
+                >
+                  <Camera size={24} color={Colors.primary} />
+                  <Text style={styles.imagePickerOptionText}>Camera (Crop)</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.imagePickerOption}
+                  onPress={() => handlePickImage(false)}
+                >
+                  <UploadCloud size={24} color={Colors.primary} />
+                  <Text style={styles.imagePickerOptionText}>Gallery (Full)</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.imagePickerOption}
+                  onPress={() => handlePickImage(true)}
+                >
+                  <UploadCloud size={24} color={Colors.primary} />
+                  <Text style={styles.imagePickerOptionText}>Gallery (Crop)</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={deleteModalVisible}
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.centeredModal}>
+            <View style={styles.deleteModal}>
+              <View style={styles.deleteModalIcon}>
+                <AlertTriangle size={48} color={Colors.red} />
+              </View>
+              
+              <Text style={styles.deleteModalTitle}>Delete Product</Text>
+              <Text style={styles.deleteModalMessage}>
+                Are you sure you want to delete "{productToDelete?.name}"? This action cannot be undone.
+              </Text>
+              
+              <View style={styles.deleteModalActions}>
+                <TouchableOpacity 
+                  style={styles.deleteModalCancelButton}
+                  onPress={() => setDeleteModalVisible(false)}
+                >
+                  <Text style={styles.deleteModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.deleteModalDeleteButton}
+                  onPress={confirmDelete}
+                >
+                  <Text style={styles.deleteModalDeleteText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={errorModalVisible}
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.centeredModal}>
+            <View style={styles.errorModal}>
+              <View style={styles.errorModalIcon}>
+                <AlertTriangle size={48} color={Colors.red} />
+              </View>
+              
+              <Text style={styles.errorModalTitle}>Error</Text>
+              <Text style={styles.errorModalMessage}>{errorMessage}</Text>
+              
+              <TouchableOpacity 
+                style={styles.errorModalButton}
+                onPress={() => setErrorModalVisible(false)}
+              >
+                <Text style={styles.errorModalButtonText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Toast */}
+      <Toast
+        visible={toastVisible}
+        type={toastType}
+        title={toastTitle}
+        message={toastMessage}
+        onClose={() => setToastVisible(false)}
+      />
     </View>
   );
 }
@@ -567,8 +709,6 @@ const styles = StyleSheet.create({
     width: 76,
     height: 100,
     marginTop:26,
-    // borderTopLeftRadius: 16,
-    // borderBottomLeftRadius: 16,
   },
   productContent: {
       flex: 1,
@@ -625,27 +765,17 @@ const styles = StyleSheet.create({
   deleteButton: {
     backgroundColor: Colors.redLighter,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 20,
-    backgroundColor: Colors.primary,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
   // --- Modal Styles ---
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  centeredModal: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   modalContent: {
     backgroundColor: Colors.surface,
@@ -751,7 +881,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
   },
-
   imagePreviewContainer: {
     position: 'relative',
     width: '100%',
@@ -801,6 +930,143 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   stockOptionTextActive: {
+    color: Colors.white,
+  },
+  // --- Image Picker Modal Styles ---
+  imagePickerModal: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  imagePickerOptions: {
+    padding: 20,
+  },
+  imagePickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: Colors.background,
+  },
+  imagePickerOptionText: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text,
+    marginLeft: 12,
+  },
+  // --- Delete Modal Styles ---
+  deleteModal: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 320,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  deleteModalIcon: {
+    marginBottom: 16,
+  },
+  deleteModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  deleteModalMessage: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  deleteModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  deleteModalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  deleteModalCancelText: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.textSecondary,
+  },
+  deleteModalDeleteButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: Colors.red,
+    alignItems: 'center',
+  },
+  deleteModalDeleteText: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.white,
+  },
+  // --- Error Modal Styles ---
+  errorModal: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 320,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  errorModalIcon: {
+    marginBottom: 16,
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  errorModalMessage: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  errorModalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    minWidth: 100,
+  },
+  errorModalButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter_500Medium',
     color: Colors.white,
   },
 });

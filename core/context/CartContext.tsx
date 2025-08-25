@@ -1,9 +1,11 @@
 // d:\NEW-HP-APP\core\context\CartContext.tsx
 import { addDoc, collection, deleteDoc, doc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { FIREBASE_AUTH, FIREBASE_DB } from '../firebase/firebase';
+import { FIREBASE_DB } from '../firebase/firebase';
 import { Product } from '../services/productService';
 import { PromocodeData } from '../services/promocodeService';
+import { useAuth } from '../auth/AuthContext';
+import { createToastHelpers } from '../utils/toastUtils';
 
 // Define the cart item interface
 export interface CartItem {
@@ -39,13 +41,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [appliedPromocode, setAppliedPromocode] = useState<PromocodeData | null>(null);
   const [discount, setDiscount] = useState(0);
-  const auth = FIREBASE_AUTH;
+  const { userSession, isAuthenticated } = useAuth();
+  const toast = createToastHelpers();
 
 
   // Fetch cart items when the component mounts or user changes
   useEffect(() => {
     const fetchCartItems = async () => {
-      if (!auth.currentUser) {
+      if (!isAuthenticated || !userSession) {
         setCartItems([]);
         setLoading(false);
         return;
@@ -53,7 +56,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         setLoading(true);
-        const userId = auth.currentUser.uid;
+        const userId = userSession.uid;
         const cartCollection = collection(FIREBASE_DB, 'carts');
         const q = query(cartCollection, where("userId", "==", userId));
         const querySnapshot = await getDocs(q);
@@ -72,24 +75,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     fetchCartItems();
-    
-    // Set up an auth state listener
-    const unsubscribe = auth.onAuthStateChanged(() => {
-      fetchCartItems();
-    });
-
-    return () => unsubscribe();
-  }, [auth]);
+  }, [isAuthenticated, userSession]);
 
   // Add a product to the cart
   const addToCart = async (product: Product, quantity: number) => {
-    if (!auth.currentUser) {
+    if (!isAuthenticated || !userSession) {
       console.error('User not authenticated');
+      toast.showAuthenticationError('Please log in to add items to cart');
       return;
     }
 
     try {
-      const userId = auth.currentUser.uid;
+      const userId = userSession.uid;
       
       // Check if the product is already in the cart
       const existingItem = cartItems.find(item => item.productId === product.id);
@@ -97,6 +94,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (existingItem) {
         // Update the quantity if the product is already in the cart
         await updateQuantity(existingItem.id!, existingItem.quantity + quantity);
+        toast.showSuccess('Cart Updated', `${product.name} quantity updated in your cart`);
       } else {
         // Add a new item to the cart
         const cartCollection = collection(FIREBASE_DB, 'carts');
@@ -111,9 +109,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const docRef = await addDoc(cartCollection, newCartItem);
         
         setCartItems(prev => [...prev, { id: docRef.id, ...newCartItem }]);
+        toast.showSuccess('Added to Cart', `${product.name} has been added to your cart`);
       }
     } catch (error) {
       console.error('Error adding to cart:', error);
+      toast.showError('Add to Cart Failed', 'Failed to add item to cart. Please try again.');
       throw error;
     }
   };

@@ -1,7 +1,7 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ArrowLeft, Bell, ChevronRight, Edit, Lock, LogOut, Tag, Trash2, User, Users, X } from 'lucide-react-native';
+import { ArrowLeft, Bell, ChevronRight, Edit, Lock, LogOut, Tag, Trash2, User, Users, X, UserCheck } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -115,6 +115,7 @@ const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSub
                             {admin.permissions.orders && <Text style={styles.permissionTag}>Orders</Text>}
                             {admin.permissions.delivery && <Text style={styles.permissionTag}>Delivery</Text>}
                             {admin.permissions.products && <Text style={styles.permissionTag}>Products</Text>}
+                            {admin.permissions.users && <Text style={styles.permissionTag}>Users</Text>}
                         </View>
                     </View>
                     <View style={styles.subAdminActions}>
@@ -741,6 +742,7 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
         orders: editingAdmin?.permissions?.orders || false,
         delivery: editingAdmin?.permissions?.delivery || false,
         products: editingAdmin?.permissions?.products || false,
+        users: editingAdmin?.permissions?.users || false,
     });
     const [isLoading, setIsLoading] = useState(false);
 
@@ -757,6 +759,7 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
                 orders: editingAdmin.permissions?.orders || false,
                 delivery: editingAdmin.permissions?.delivery || false,
                 products: editingAdmin.permissions?.products || false,
+                users: editingAdmin.permissions?.users || false,
             });
         } else {
             // Reset form for new sub-admin
@@ -770,6 +773,7 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
                 orders: false,
                 delivery: false,
                 products: false,
+                users: false,
             });
         }
     }, [editingAdmin]);
@@ -931,6 +935,15 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
                     thumbColor={Colors.white} 
                 />
             </View>
+            <View style={styles.permissionRow}>
+                <Text style={styles.permissionLabel}>Customer Users Management</Text>
+                <Switch 
+                    value={permissions.users} 
+                    onValueChange={() => togglePermission('users')} 
+                    trackColor={{false: Colors.border, true: Colors.primaryLight}} 
+                    thumbColor={Colors.white} 
+                />
+            </View>
 
             <TouchableOpacity 
                 style={[styles.saveButton, isLoading && styles.saveButtonDisabled]} 
@@ -947,7 +960,7 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
 
 export default function AdminProfileScreen({ navigation }: { navigation: any }) {
   const insets = useSafeAreaInsets();
-  const { goBack } = useAdminNavigation();
+  const { goBack, setActiveTab } = useAdminNavigation();
   const { userSession, logout, login } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');

@@ -16,8 +16,6 @@ export interface OrderData {
   deliveryAddress: string;
   items: CartItem[];
   subtotal: number;
-  deliveryCharge: number;
-  gst: number;
   discount: number;
   total: number;
   appliedPromocode?: PromocodeData | null;
@@ -42,8 +40,6 @@ export interface CreateOrderData {
   deliveryAddress: string;
   items: CartItem[];
   subtotal: number;
-  deliveryCharge: number;
-  gst: number;
   discount: number;
   total: number;
   appliedPromocode?: PromocodeData | null;

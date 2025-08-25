@@ -1,6 +1,6 @@
 // File: core/auth/StableAdminLayout.tsx
 import { router } from 'expo-router';
-import { BarChart2, ClipboardList, Package, Truck, User } from 'lucide-react-native';
+import { BarChart2, ClipboardList, Package, Truck, User, Users } from 'lucide-react-native';
 import React, { createContext, useContext, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,19 +13,24 @@ import AdminDeliveryAgentScreen from '../../app/admin/admindeliverymanagement';
 import AdminOrdersScreen from '../../app/admin/adminordersmanagement';
 import AdminProductsScreen from '../../app/admin/adminproductmanagement';
 import AdminProfileScreen from '../../app/admin/adminprofile';
+import CustomerUsersScreen from '../../app/admin/users';
 
-// Navigation context for handling back actions
+// Navigation context for handling back actions and tab navigation
 interface AdminNavigationContextType {
   goBack: () => void;
+  setActiveTab: (tab: AdminTab) => void;
+  activeTab: AdminTab;
 }
 
 const AdminNavigationContext = createContext<AdminNavigationContextType>({
   goBack: () => router.replace('/'),
+  setActiveTab: () => {},
+  activeTab: 'dashboard',
 });
 
 export const useAdminNavigation = () => useContext(AdminNavigationContext);
 
-type AdminTab = 'dashboard' | 'orders' | 'products' | 'delivery' | 'profile';
+type AdminTab = 'dashboard' | 'orders' | 'products' | 'delivery' | 'profile' | 'users';
 
 const Colors = {
   primary: '#0D47A1',
@@ -58,6 +63,10 @@ export const StableAdminLayout: React.FC = () => {
   if (hasPermission(userSession, 'delivery')) {
     availableTabs.push({ key: 'delivery', title: 'Delivery', icon: Truck });
   }
+  // Users tab is available for full admins or sub-admins with users permission
+  if (isAdmin || hasPermission(userSession, 'users')) {
+    availableTabs.push({ key: 'users', title: 'Users', icon: Users });
+  }
   availableTabs.push({ key: 'profile', title: 'Profile', icon: User });
 
   // Set initial tab to first available
@@ -70,6 +79,8 @@ export const StableAdminLayout: React.FC = () => {
 
   const navigationValue: AdminNavigationContextType = {
     goBack: handleGoBack,
+    setActiveTab,
+    activeTab,
   };
 
   const renderScreen = () => {
@@ -82,6 +93,8 @@ export const StableAdminLayout: React.FC = () => {
         return <AdminProductsScreen navigation={{}} />;
       case 'delivery':
         return <AdminDeliveryAgentScreen navigation={{}} />;
+      case 'users':
+        return <CustomerUsersScreen />;
       case 'profile':
       default:
         return <AdminProfileScreen navigation={{}} />;

@@ -342,7 +342,6 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
       }
 
       const subtotal = items.reduce((sum, it) => sum + (it.product.price * it.quantity), 0);
-      const deliveryCharge = items.reduce((sum, it) => sum + (it.product.deliveryCharge || 0), 0);
 
       const orderData = {
         userId: 'admin-created',
@@ -351,10 +350,8 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
         deliveryAddress: newOrderData.address,
         items,
         subtotal,
-        deliveryCharge,
-        gst: 0,
         discount: 0,
-        total: subtotal + deliveryCharge,
+        total: subtotal,
         paymentMethod: 'cod' as const,
       };
 
@@ -622,7 +619,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                                   </Text>
                                 </View>
                                 <View style={styles.modalRow}><Text style={styles.modalLabel}>Subtotal:</Text><Text style={styles.modalValue}>₹{formatAmount(selectedOrder.subtotal)}</Text></View>
-                                <View style={styles.modalRow}><Text style={styles.modalLabel}>Delivery Charge:</Text><Text style={styles.modalValue}>₹{formatAmount(selectedOrder.deliveryCharge)}</Text></View>
+
                                 {selectedOrder.discount > 0 && (
                                   <View style={styles.modalRow}><Text style={styles.modalLabel}>Discount:</Text><Text style={styles.modalValue}>₹{formatAmount(selectedOrder.discount)}</Text></View>
                                 )}

@@ -2,7 +2,7 @@
 // Note: keep types loose to avoid coupling; integrate with your actual Auth types if needed
 
 // Define the known permission keys used in the app
-export type AdminPermissionKey = 'orders' | 'products' | 'delivery';
+export type AdminPermissionKey = 'orders' | 'products' | 'delivery' | 'users';
 
 export type AdminRouteName =
   | 'admindashboard'

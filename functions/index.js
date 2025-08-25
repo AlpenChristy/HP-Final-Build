@@ -32,7 +32,7 @@ setGlobalOptions({ maxInstances: 10 });
 
 // WhatsApp API Configuration
 const WHATSAPP_CONFIG = {
-  accessToken: "EAAPTyTf77LMBPaOEDQxjXAcwyXPxIucAPXtU1q6aRZCmo9ZAajfrrYZB8L78iFllvUuMxWSWr91uIqQ9ZAOpLVZCXoCGR0Rf3l5cJRQIWoHCgPIWaGSFBYOf2u0GvUCFR3yw0TrrjlHHEUhReE7ZAhluSIie9YYXDCzwZCBDdDDfHnljMM4CPKm6oO2lsd6BVZBkyw9MN9WvtOMUxy7XVAlW8UA6yfGGPpfXDBcL0cIIb2ZBLtgZDZD",
+  accessToken: "EAAPTyTf77LMBPWTmJqa2K12cjI7PMiAsF5oSSEo1KZCiKdRZAoipnU82xfHm4mlEiMgbbiRtv2eQg8ZA8S7x20I49i1bxaBYBBOKdkcFPIPeCJDTvHFUHUv4XyoKBnuEzB7lqoyk7N7JqshJ65QrJulcxCU0g4kMLAGQxCYctvxoFrOljo1SmTqElCDnAjZBuwZDZD",
   phoneNumberId: "751377694728568",
   apiUrl: "https://graph.facebook.com/v22.0",
   templateName: "first_vihar_template"

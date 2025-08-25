@@ -89,9 +89,7 @@ export default function CheckoutScreen() {
 
   // Calculate order details
   const subtotal = getCartTotal();
-  const deliveryCharge = 30;
-  const gstAmount = subtotal * 0.05; // 5% GST
-  const totalAmount = subtotal + deliveryCharge + gstAmount - discount;
+  const totalAmount = subtotal - discount;
 
   // Handle address change
   const handleChangeAddress = () => {
@@ -181,8 +179,6 @@ export default function CheckoutScreen() {
         deliveryAddress: deliveryAddress.trim(),
         items: cartItems,
         subtotal,
-        deliveryCharge,
-        gst: gstAmount,
         discount,
         total: totalAmount,
         appliedPromocode,
@@ -292,14 +288,7 @@ export default function CheckoutScreen() {
                     <Text style={styles.billLabel}>Item Total</Text>
                     <Text style={styles.billValue}>₹{subtotal.toFixed(2)}</Text>
                 </View>
-                <View style={styles.billRow}>
-                    <Text style={styles.billLabel}>Delivery Charge</Text>
-                    <Text style={styles.billValue}>₹{deliveryCharge.toFixed(2)}</Text>
-                </View>
-                <View style={styles.billRow}>
-                    <Text style={styles.billLabel}>GST (5%)</Text>
-                    <Text style={styles.billValue}>₹{gstAmount.toFixed(2)}</Text>
-                </View>
+
                 {discount > 0 && (
                     <View style={styles.billRow}>
                         <Text style={[styles.billLabel, {color: Colors.green}]}>Promo Discount</Text>

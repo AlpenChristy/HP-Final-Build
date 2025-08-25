@@ -32,8 +32,6 @@ interface OrderCompleteData {
     consumerNumber?: string;
     items?: any[];
     subtotal?: number;
-    deliveryCharge?: number;
-    gst?: number;
     discount?: number;
 }
 
@@ -69,8 +67,6 @@ export default function OrderPlacedScreen() {
               consumerNumber: order.consumerNumber,
               items: order.items,
               subtotal: order.subtotal,
-              deliveryCharge: order.deliveryCharge,
-              gst: order.gst,
               discount: order.discount
             });
           }

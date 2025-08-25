@@ -399,16 +399,7 @@ export default function OrdersScreen() {
                                 </Text>
                               </View>
                             ))}
-                            <View style={styles.itemRow}>
-                              <Text style={styles.invoiceItem}>Delivery Charge</Text>
-                              <Text style={styles.invoiceItem}>₹{selectedOrder.deliveryCharge}</Text>
-                            </View>
-                            {selectedOrder.gst > 0 && (
-                              <View style={styles.itemRow}>
-                                <Text style={styles.invoiceItem}>GST</Text>
-                                <Text style={styles.invoiceItem}>₹{selectedOrder.gst}</Text>
-                              </View>
-                            )}
+
                             {selectedOrder.discount > 0 && (
                               <View style={styles.itemRow}>
                                 <Text style={styles.invoiceItem}>Discount</Text>

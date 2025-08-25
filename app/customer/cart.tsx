@@ -212,10 +212,8 @@ export default function CartScreen() {
       return getCartTotal();
   };
 
-  const deliveryCharge = cartItems.length > 0 ? 30 : 0;
   const subtotal = calculateSubtotal();
-  const gstAmount = subtotal * 0.05; // 5% GST
-  const totalAmount = subtotal + deliveryCharge + gstAmount - discount;
+  const totalAmount = subtotal - discount;
 
   const renderCartItem = (item: any) => (
   <View key={item.id} style={styles.itemCard}>
@@ -368,18 +366,7 @@ export default function CartScreen() {
                     <Text style={styles.billLabel}>Item Total</Text>
                     <Text style={styles.billValue}>₹{subtotal.toFixed(2)}</Text>
                 </View>
-                {cartItems.length > 0 && (
-                    <View style={styles.billRow}>
-                        <Text style={styles.billLabel}>Delivery Charge</Text>
-                        <Text style={styles.billValue}>₹{deliveryCharge.toFixed(2)}</Text>
-                    </View>
-                )}
-                {cartItems.length > 0 && (
-                    <View style={styles.billRow}>
-                        <Text style={styles.billLabel}>GST (5%)</Text>
-                        <Text style={styles.billValue}>₹{gstAmount.toFixed(2)}</Text>
-                    </View>
-                )}
+
                 {discount > 0 && (
                     <View style={styles.billRow}>
                         <Text style={[styles.billLabel, {color: Colors.green}]}>Promo Discount</Text>

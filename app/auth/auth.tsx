@@ -33,6 +33,215 @@ interface FormData {
   confirmPassword: string;
 }
 
+// LoginForm component with icon-based toggle
+const LoginForm = ({ 
+  usePhoneAuth, 
+  setUsePhoneAuth, 
+  formData, 
+  updateFormData, 
+  showPassword, 
+  setShowPassword, 
+  isLoading, 
+  handleSubmit, 
+  setForgotPasswordModalVisible 
+}: {
+  usePhoneAuth: boolean;
+  setUsePhoneAuth: (value: boolean) => void;
+  formData: FormData;
+  updateFormData: (field: keyof FormData, value: string) => void;
+  showPassword: boolean;
+  setShowPassword: (value: boolean) => void;
+  isLoading: boolean;
+  handleSubmit: () => void;
+  setForgotPasswordModalVisible: (value: boolean) => void;
+}) => (
+  <>
+    <View style={styles.iconToggleContainer}>
+      <Text style={styles.iconToggleLabel}>Sign in with</Text>
+      <View style={styles.iconToggleButtons}>
+        <TouchableOpacity
+          style={[styles.iconToggleButton, !usePhoneAuth && styles.activeIconToggle]}
+          onPress={() => setUsePhoneAuth(false)}
+        >
+          <Mail size={28} color={!usePhoneAuth ? Colors.white : Colors.textSecondary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.iconToggleButton, usePhoneAuth && styles.activeIconToggle]}
+          onPress={() => setUsePhoneAuth(true)}
+        >
+          <Phone size={28} color={usePhoneAuth ? Colors.white : Colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+    </View>
+
+    <View style={styles.inputContainer}>
+      {!usePhoneAuth ? (
+        <View style={styles.inputWrapper}>
+          <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Email Address"
+            value={formData.email}
+            onChangeText={(text) => updateFormData('email', text)}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholderTextColor={Colors.textSecondary}
+          />
+        </View>
+      ) : (
+        <View style={styles.inputWrapper}>
+          <Phone size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Contact Phone Number"
+            value={formData.phone}
+            onChangeText={(text) => updateFormData('phone', text)}
+            keyboardType="phone-pad"
+            placeholderTextColor={Colors.textSecondary}
+          />
+        </View>
+      )}
+
+      <View style={styles.inputWrapper}>
+        <View style={styles.passwordInputContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Password"
+            value={formData.password}
+            onChangeText={(text) => updateFormData('password', text)}
+            secureTextEntry={!showPassword}
+            placeholderTextColor={Colors.textSecondary}
+          />
+          <TouchableOpacity
+            style={styles.eyeButton}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+
+    <TouchableOpacity
+      style={[styles.submitButton, isLoading && styles.disabledButton]}
+      onPress={handleSubmit}
+      disabled={isLoading}
+    >
+      {isLoading ? (
+        <ActivityIndicator size="small" color={Colors.white} />
+      ) : (
+        <Text style={styles.submitButtonText}>Login</Text>
+      )}
+    </TouchableOpacity>
+
+    <TouchableOpacity 
+      style={styles.forgotPassword}
+      onPress={() => setForgotPasswordModalVisible(true)}
+    >
+      <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+    </TouchableOpacity>
+  </>
+);
+
+// RegisterForm component with phone mandatory and email optional
+const RegisterForm = ({ 
+  formData, 
+  updateFormData, 
+  showPassword, 
+  setShowPassword, 
+  isLoading, 
+  handleSubmit 
+}: {
+  formData: FormData;
+  updateFormData: (field: keyof FormData, value: string) => void;
+  showPassword: boolean;
+  setShowPassword: (value: boolean) => void;
+  isLoading: boolean;
+  handleSubmit: () => void;
+}) => (
+  <>
+    <View style={styles.inputContainer}>
+      <View style={styles.inputWrapper}>
+        <User size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+        <TextInput
+          style={styles.input}
+          placeholder="Full Name"
+          value={formData.name}
+          onChangeText={(text) => updateFormData('name', text)}
+          placeholderTextColor={Colors.textSecondary}
+        />
+      </View>
+
+      <View style={styles.inputWrapper}>
+        <Phone size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+        <TextInput
+          style={styles.input}
+          placeholder="Contact Phone Number *"
+          value={formData.phone}
+          onChangeText={(text) => updateFormData('phone', text)}
+          keyboardType="phone-pad"
+          placeholderTextColor={Colors.textSecondary}
+        />
+      </View>
+
+      <View style={styles.inputWrapper}>
+        <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+        <TextInput
+          style={styles.input}
+          placeholder="Email Address (Optional)"
+          value={formData.email}
+          onChangeText={(text) => updateFormData('email', text)}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholderTextColor={Colors.textSecondary}
+        />
+      </View>
+
+      <View style={styles.inputWrapper}>
+        <View style={styles.passwordInputContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="Password"
+            value={formData.password}
+            onChangeText={(text) => updateFormData('password', text)}
+            secureTextEntry={!showPassword}
+            placeholderTextColor={Colors.textSecondary}
+          />
+          <TouchableOpacity
+            style={styles.eyeButton}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.inputWrapper}>
+        <TextInput
+          style={styles.input}
+          placeholder="Confirm Password"
+          value={formData.confirmPassword}
+          onChangeText={(text) => updateFormData('confirmPassword', text)}
+          secureTextEntry={true}
+          placeholderTextColor={Colors.textSecondary}
+        />
+      </View>
+    </View>
+
+    <TouchableOpacity
+      style={[styles.submitButton, isLoading && styles.disabledButton]}
+      onPress={handleSubmit}
+      disabled={isLoading}
+    >
+      {isLoading ? (
+        <ActivityIndicator size="small" color={Colors.white} />
+      ) : (
+        <Text style={styles.submitButtonText}>Register</Text>
+      )}
+    </TouchableOpacity>
+  </>
+);
+
 // ForgotPasswordModal component moved outside to prevent re-rendering
 const ForgotPasswordModal = ({ 
   visible, 
@@ -268,12 +477,8 @@ export default function AuthScreen() {
         toast.showError('Validation Error', 'Please fill all required fields for registration.');
         return false;
       }
-      if (!usePhoneAuth && !formData.email) {
-        toast.showError('Validation Error', 'Please enter an email for registration or switch to phone.');
-        return false;
-      }
-      if (usePhoneAuth && !formData.phone) {
-        toast.showError('Validation Error', 'Please enter a phone number for registration or switch to email.');
+      if (!formData.phone) {
+        toast.showError('Validation Error', 'Please enter your phone number.');
         return false;
       }
       if (formData.password.length < 6) {
@@ -473,45 +678,23 @@ export default function AuthScreen() {
           }
         }
       } else {
-        // Registration
-        if (usePhoneAuth) {
-          // Register customer via phone (custom auth)
-          const created = await customerAuthService.registerWithPhone(formData.name, formData.phone, formData.password);
-          // Build session for new phone-based user
-          const phoneSession: UserSession = {
-            uid: created.uid,
-            phoneNumber: formData.phone,
-            displayName: formData.name,
-            role: 'customer',
-            sessionToken: SessionManager.generateSessionToken(),
-            loginTime: Date.now(),
-          };
-          await login(phoneSession);
-          toast.showRegistrationSuccess();
-          setTimeout(() => {
-            router.replace('/customer/home');
-          }, 300);
-          return;
-        } else {
-          // Register customer via email (custom auth - same pattern as phone)
-          const created = await customerAuthService.registerWithEmail(formData.name, formData.email, formData.phone, formData.password);
-          // Build session for new email-based user
-          const emailSession: UserSession = {
-            uid: created.uid,
-            email: formData.email,
-            phoneNumber: formData.phone,
-            displayName: formData.name,
-            role: 'customer',
-            sessionToken: SessionManager.generateSessionToken(),
-            loginTime: Date.now(),
-          };
-          await login(emailSession);
-          toast.showRegistrationSuccess();
-          setTimeout(() => {
-            router.replace('/customer/home');
-          }, 300);
-          return;
-        }
+        // Registration - always use phone since it's mandatory
+        const created = await customerAuthService.registerWithPhone(formData.name, formData.phone, formData.password);
+        // Build session for new phone-based user
+        const phoneSession: UserSession = {
+          uid: created.uid,
+          phoneNumber: formData.phone,
+          displayName: formData.name,
+          role: 'customer',
+          sessionToken: SessionManager.generateSessionToken(),
+          loginTime: Date.now(),
+        };
+        await login(phoneSession);
+        toast.showRegistrationSuccess();
+        setTimeout(() => {
+          router.replace('/customer/home');
+        }, 300);
+        return;
       }
     } catch (error: any) {
       console.error('Authentication error:', error);
@@ -698,116 +881,28 @@ export default function AuthScreen() {
             <Text style={[styles.toggleText, !isLogin && styles.activeToggleText]}>Register</Text>
           </TouchableOpacity>
         </View>
-        <View style={styles.toggleContainer}>
-          <TouchableOpacity
-            style={[styles.toggleButton, !usePhoneAuth && styles.activeToggle]}
-            onPress={() => setUsePhoneAuth(false)}
-          >
-            <Text style={[styles.toggleText, !usePhoneAuth && styles.activeToggleText]}>Use Email</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toggleButton, usePhoneAuth && styles.activeToggle]}
-            onPress={() => setUsePhoneAuth(true)}
-          >
-            <Text style={[styles.toggleText, usePhoneAuth && styles.activeToggleText]}>Use Phone</Text>
-          </TouchableOpacity>
-        </View>
 
-        <View style={styles.inputContainer}>
-          {!isLogin && (
-            <View style={styles.inputWrapper}>
-              <User size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name"
-                value={formData.name}
-                onChangeText={(text) => updateFormData('name', text)}
-                placeholderTextColor={Colors.textSecondary}
-              />
-            </View>
-          )}
-
-          {!usePhoneAuth ? (
-            <View style={styles.inputWrapper}>
-              <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Email Address"
-                value={formData.email}
-                onChangeText={(text) => updateFormData('email', text)}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                placeholderTextColor={Colors.textSecondary}
-              />
-            </View>
-          ) : (
-            <View style={styles.inputWrapper}>
-              <Phone size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Contact Phone Number"
-                value={formData.phone}
-                onChangeText={(text) => updateFormData('phone', text)}
-                keyboardType="phone-pad"
-                placeholderTextColor={Colors.textSecondary}
-              />
-            </View>
-          )}
-
-          <View style={styles.inputWrapper}>
-            <View style={styles.passwordInputContainer}>
-              <TextInput
-                style={styles.passwordInput}
-                placeholder="Password"
-                value={formData.password}
-                onChangeText={(text) => updateFormData('password', text)}
-                secureTextEntry={!showPassword}
-                placeholderTextColor={Colors.textSecondary}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {!isLogin && (
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="Confirm Password"
-                value={formData.confirmPassword}
-                onChangeText={(text) => updateFormData('confirmPassword', text)}
-                secureTextEntry={true}
-                placeholderTextColor={Colors.textSecondary}
-              />
-            </View>
-          )}
-        </View>
-
-        <TouchableOpacity
-          style={[styles.submitButton, isLoading && styles.disabledButton]}
-          onPress={handleSubmit}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator size="small" color={Colors.white} />
-          ) : (
-            <Text style={styles.submitButtonText}>
-              {isLogin ? 'Login' : 'Register'}
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        {isLogin && (
-          <TouchableOpacity 
-            style={styles.forgotPassword}
-            onPress={() => setForgotPasswordModalVisible(true)}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity>
+        {isLogin ? (
+          <LoginForm 
+            usePhoneAuth={usePhoneAuth}
+            setUsePhoneAuth={setUsePhoneAuth}
+            formData={formData}
+            updateFormData={updateFormData}
+            showPassword={showPassword}
+            setShowPassword={setShowPassword}
+            isLoading={isLoading}
+            handleSubmit={handleSubmit}
+            setForgotPasswordModalVisible={setForgotPasswordModalVisible}
+          />
+        ) : (
+          <RegisterForm 
+            formData={formData}
+            updateFormData={updateFormData}
+            showPassword={showPassword}
+            setShowPassword={setShowPassword}
+            isLoading={isLoading}
+            handleSubmit={handleSubmit}
+          />
         )}
       </View>
 
@@ -1068,5 +1163,42 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: 14,
     fontWeight: '600',
+  },
+  iconToggleContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 10,
+  },
+  iconToggleLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+  },
+  iconToggleButtons: {
+    flexDirection: 'row',
+    backgroundColor: Colors.background,
+    borderRadius: 25,
+    padding: 5,
+    marginTop: 8,
+  },
+  iconToggleButton: {
+    padding: 12,
+    borderRadius: 25,
+    marginHorizontal: 6,
+    width: 50,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeIconToggle: {
+    backgroundColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
   },
 });

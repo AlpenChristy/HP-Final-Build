@@ -14,6 +14,7 @@ export interface SubAdminPermissions {
   orders: boolean;
   delivery: boolean;
   products: boolean;
+  users: boolean;
 }
 
 // Sub-admin data interface
