@@ -3,15 +3,15 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { Eye, EyeOff, Mail, Phone, User, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -63,13 +63,13 @@ const LoginForm = ({
           style={[styles.iconToggleButton, !usePhoneAuth && styles.activeIconToggle]}
           onPress={() => setUsePhoneAuth(false)}
         >
-          <Mail size={28} color={!usePhoneAuth ? Colors.white : Colors.textSecondary} />
+          <Mail size={20} color={!usePhoneAuth ? Colors.white : Colors.textSecondary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.iconToggleButton, usePhoneAuth && styles.activeIconToggle]}
           onPress={() => setUsePhoneAuth(true)}
         >
-          <Phone size={28} color={usePhoneAuth ? Colors.white : Colors.textSecondary} />
+          <Phone size={20} color={usePhoneAuth ? Colors.white : Colors.textSecondary} />
         </TouchableOpacity>
       </View>
     </View>

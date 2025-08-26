@@ -4,11 +4,13 @@ import { router } from 'expo-router';
 import { updateEmail } from 'firebase/auth';
 import { ArrowLeft, ChevronRight, LogOut, User, X } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LogoutConfirmationBox from '../../components/ui/LogoutConfirmationBox';
 import { useAuth } from '../../core/auth/AuthContext';
 import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 import { userService } from '../../core/services/userService';
+import { createToastHelpers } from '../../core/utils/toastUtils';
 
 // --- Red Color Palette ---
 const Colors = {
@@ -56,36 +58,29 @@ const EditProfileContent = ({ user, onSave, isSaving }: { user: any, onSave: (na
 export default function DeliveryAgentProfileScreen() {
   const insets = useSafeAreaInsets();
   const { userSession, logout, login } = useAuth();
+  const toast = createToastHelpers();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileData, setProfileData] = useState<any>(userSession);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-              router.replace('/');
-            } catch (error) {
-              console.error('Logout error:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+  const handleLogout = () => {
+    setLogoutModalVisible(true);
+  };
+
+  const confirmLogout = async () => {
+    try {
+      await logout();
+      router.replace('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.showError('Error', 'Failed to logout. Please try again.');
+    }
   };
 
   const openModal = async (contentKey: string) => {
@@ -122,16 +117,16 @@ export default function DeliveryAgentProfileScreen() {
     if (!userSession?.uid) return;
 
     if (!name) {
-      Alert.alert('Validation', 'Name cannot be empty.');
+      toast.showError('Validation Error', 'Name cannot be empty.');
       return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      Alert.alert('Validation', 'Please enter a valid email address.');
+      toast.showError('Validation Error', 'Please enter a valid email address.');
       return;
     }
     if (phone && phone.replace(/\D/g, '').length < 10) {
-      Alert.alert('Validation', 'Please enter a valid phone number.');
+      toast.showError('Validation Error', 'Please enter a valid phone number.');
       return;
     }
 
@@ -156,10 +151,10 @@ export default function DeliveryAgentProfileScreen() {
       setProfileData(updatedSession);
 
       setModalVisible(false);
-      Alert.alert('Success', 'Profile updated successfully.');
+      toast.showSuccess('Success', 'Profile updated successfully.');
     } catch (error) {
       console.error('Error updating delivery profile:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      toast.showError('Error', 'Failed to update profile. Please try again.');
     } finally {
       setIsSavingProfile(false);
     }
@@ -258,6 +253,14 @@ export default function DeliveryAgentProfileScreen() {
             </View>
         </View>
       </Modal>
+
+      {/* Logout Confirmation Modal */}
+      <LogoutConfirmationBox
+        visible={logoutModalVisible}
+        onConfirm={confirmLogout}
+        onCancel={() => setLogoutModalVisible(false)}
+        userName={userSession?.displayName}
+      />
     </View>
   );
 }

@@ -4,8 +4,8 @@ import { ArrowLeft, Edit, Lock, Mail, Phone, Plus, Search, Trash2, X } from 'luc
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAdminNavigation } from '../../core/auth/AdminNavigationContext';
 import { useAuth } from '../../core/auth/AuthContext';
-import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { DeliveryAgent, deliveryAgentService } from '../../core/services/deliveryAgentService';
 import { createToastHelpers } from '../../core/utils/toastUtils';
 

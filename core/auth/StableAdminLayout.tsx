@@ -1,9 +1,10 @@
 // File: core/auth/StableAdminLayout.tsx
 import { router } from 'expo-router';
 import { BarChart2, ClipboardList, Package, Truck, User, Users } from 'lucide-react-native';
-import React, { createContext, useContext, useState } from 'react';
+import React, { useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AdminNavigationContext, AdminTab } from './AdminNavigationContext';
 import { useAuth } from './AuthContext';
 import { hasPermission } from './rbac';
 
@@ -14,23 +15,6 @@ import AdminOrdersScreen from '../../app/admin/adminordersmanagement';
 import AdminProductsScreen from '../../app/admin/adminproductmanagement';
 import AdminProfileScreen from '../../app/admin/adminprofile';
 import CustomerUsersScreen from '../../app/admin/users';
-
-// Navigation context for handling back actions and tab navigation
-interface AdminNavigationContextType {
-  goBack: () => void;
-  setActiveTab: (tab: AdminTab) => void;
-  activeTab: AdminTab;
-}
-
-const AdminNavigationContext = createContext<AdminNavigationContextType>({
-  goBack: () => router.replace('/'),
-  setActiveTab: () => {},
-  activeTab: 'dashboard',
-});
-
-export const useAdminNavigation = () => useContext(AdminNavigationContext);
-
-type AdminTab = 'dashboard' | 'orders' | 'products' | 'delivery' | 'profile' | 'users';
 
 const Colors = {
   primary: '#0D47A1',
@@ -77,7 +61,7 @@ export const StableAdminLayout: React.FC = () => {
     router.replace('/');
   };
 
-  const navigationValue: AdminNavigationContextType = {
+  const navigationValue = {
     goBack: handleGoBack,
     setActiveTab,
     activeTab,
@@ -122,7 +106,7 @@ export const StableAdminLayout: React.FC = () => {
                 onPress={() => setActiveTab(tab.key)}
               >
                 <IconComponent 
-                  size={24} 
+                  size={22} 
                   color={isActive ? Colors.primary : Colors.textSecondary}
                   fill="transparent"
                 />
@@ -173,7 +157,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 10,
     marginTop: 4,
     fontWeight: '500',
   },

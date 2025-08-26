@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, X as CloseIcon, Info, X } from 'lucide-react-native';
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
     Animated,
     Dimensions,
@@ -35,8 +35,17 @@ const Toast: React.FC<ToastProps> = ({
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.8)).current;
+  const isMounted = useRef(true);
 
   useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted.current) return;
+
     if (visible) {
       // Show animation
       Animated.parallel([
@@ -60,16 +69,20 @@ const Toast: React.FC<ToastProps> = ({
 
       // Auto hide after duration
       const timer = setTimeout(() => {
-        hideToast();
+        if (isMounted.current) {
+          hideToast();
+        }
       }, duration);
 
       return () => clearTimeout(timer);
     } else {
       hideToast();
     }
-  }, [visible]);
+  }, [visible, duration, hideToast]);
 
-  const hideToast = () => {
+  const hideToast = useCallback(() => {
+    if (!isMounted.current) return;
+    
     Animated.parallel([
       Animated.timing(translateY, {
         toValue: -100,
@@ -87,9 +100,11 @@ const Toast: React.FC<ToastProps> = ({
         useNativeDriver: true,
       }),
     ]).start(() => {
-      onClose?.();
+      if (isMounted.current) {
+        onClose?.();
+      }
     });
-  };
+  }, [translateY, opacity, scale, onClose]);
 
   const getToastStyles = () => {
     switch (type) {
@@ -144,7 +159,10 @@ const Toast: React.FC<ToastProps> = ({
   const toastStyles = getToastStyles();
   const IconComponent = toastStyles.icon;
 
-  if (!visible) return null;
+  // Don't render anything if not visible
+  if (!visible) {
+    return null;
+  }
 
   return (
     <Animated.View

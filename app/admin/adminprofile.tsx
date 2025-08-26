@@ -1,16 +1,18 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ArrowLeft, Bell, ChevronRight, Edit, Lock, LogOut, Tag, Trash2, User, Users, X, UserCheck } from 'lucide-react-native';
+import { ArrowLeft, Bell, ChevronRight, Edit, Lock, LogOut, Tag, Trash2, User, Users, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LogoutConfirmationBox from '../../components/ui/LogoutConfirmationBox';
+import { useAdminNavigation } from '../../core/auth/AdminNavigationContext';
 import { useAuth } from '../../core/auth/AuthContext';
-import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { PromocodeData, promocodeService } from '../../core/services/promocodeService';
 import { SubAdminData, SubAdminPermissions, subAdminService } from '../../core/services/subAdminService';
 import { userService } from '../../core/services/userService';
+import { createToastHelpers } from '../../core/utils/toastUtils';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -85,6 +87,13 @@ const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSub
     }
 
     const handleDelete = (admin: SubAdminData) => {
+        // For delete confirmations, we'll keep using Alert.alert as it requires user interaction
+        // But we'll add a toast for the actual deletion result
+        const confirmDelete = () => {
+            onDeleteSubAdmin(admin.uid);
+        };
+        
+        // Show confirmation dialog
         Alert.alert(
             'Delete Sub-Admin',
             `Are you sure you want to delete ${admin.displayName}? This action cannot be undone.`,
@@ -93,7 +102,7 @@ const SubAdminContent = ({ setModalView, setEditingAdmin, subAdmins, onDeleteSub
                 {
                     text: 'Delete',
                     style: 'destructive',
-                    onPress: () => onDeleteSubAdmin(admin.uid),
+                    onPress: confirmDelete,
                 },
             ]
         );
@@ -175,6 +184,10 @@ const PromocodeContent = ({ setModalView, setEditingPromocode, promocodes, onDel
     }
 
     const handleDelete = (promocode: PromocodeData) => {
+        const confirmDelete = () => {
+            onDeletePromocode(promocode.id);
+        };
+        
         Alert.alert(
             'Delete Promocode',
             `Are you sure you want to delete ${promocode.code}? This action cannot be undone.`,
@@ -183,7 +196,7 @@ const PromocodeContent = ({ setModalView, setEditingPromocode, promocodes, onDel
                 {
                     text: 'Delete',
                     style: 'destructive',
-                    onPress: () => onDeletePromocode(promocode.id),
+                    onPress: confirmDelete,
                 },
             ]
         );
@@ -302,7 +315,7 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
 
     const handleSave = async () => {
         if (!formData.code.trim() || !formData.discountValue.trim() || !formData.usageLimit.trim() || !formData.validUntil.trim()) {
-            Alert.alert('Error', 'Please fill in all required fields.');
+            toast.showError('Validation Error', 'Please fill in all required fields.');
             return;
         }
 
@@ -312,17 +325,17 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
         const maxDiscount = formData.maxDiscount && formData.maxDiscount.trim() !== '' ? parseFloat(formData.maxDiscount) : undefined;
 
         if (isNaN(discountValue) || isNaN(usageLimit)) {
-            Alert.alert('Error', 'Please enter valid numbers for discount value and usage limit.');
+            toast.showError('Validation Error', 'Please enter valid numbers for discount value and usage limit.');
             return;
         }
 
         if (formData.discountType === 'percentage' && (discountValue <= 0 || discountValue > 100)) {
-            Alert.alert('Error', 'Percentage discount must be between 1 and 100.');
+            toast.showError('Validation Error', 'Percentage discount must be between 1 and 100.');
             return;
         }
 
         if (formData.discountType === 'fixed' && discountValue <= 0) {
-            Alert.alert('Error', 'Fixed discount must be greater than 0.');
+            toast.showError('Validation Error', 'Fixed discount must be greater than 0.');
             return;
         }
 
@@ -346,7 +359,7 @@ const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: P
             });
         } catch (error) {
             console.error('Error saving promocode:', error);
-            Alert.alert('Error', 'An error occurred while saving.');
+            toast.showError('Save Error', 'An error occurred while saving.');
         } finally {
             setIsLoading(false);
         }
@@ -517,6 +530,10 @@ const NotificationContent = ({ setModalView, setEditingNotification, notificatio
     }
 
     const handleDelete = (notification: NotificationData) => {
+        const confirmDelete = () => {
+            onDeleteNotification(notification.id);
+        };
+        
         Alert.alert(
             'Delete Notification',
             `Are you sure you want to delete "${notification.title}"? This action cannot be undone.`,
@@ -525,7 +542,7 @@ const NotificationContent = ({ setModalView, setEditingNotification, notificatio
                 {
                     text: 'Delete',
                     style: 'destructive',
-                    onPress: () => onDeleteNotification(notification.id),
+                    onPress: confirmDelete,
                 },
             ]
         );
@@ -617,7 +634,7 @@ const AddNotificationContent = ({ editingNotification, onSave }: { editingNotifi
 
     const handleSave = async () => {
         if (!formData.title.trim() || !formData.message.trim()) {
-            Alert.alert('Error', 'Please fill in all required fields.');
+            toast.showError('Validation Error', 'Please fill in all required fields.');
             return;
         }
 
@@ -634,7 +651,7 @@ const AddNotificationContent = ({ editingNotification, onSave }: { editingNotifi
             });
         } catch (error) {
             console.error('Error saving notification:', error);
-            Alert.alert('Error', 'An error occurred while saving.');
+            toast.showError('Save Error', 'An error occurred while saving.');
         } finally {
             setIsLoading(false);
         }
@@ -787,13 +804,13 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
     const handleSave = async () => {
         // Validate form data
         if (!formData.name.trim()) {
-            Alert.alert('Error', 'Please enter the sub-admin name');
+            toast.showError('Validation Error', 'Please enter the sub-admin name');
             return;
         }
 
         // Require either email or phone number (for both new and existing sub-admins)
         if (!formData.email.trim() && !formData.phone.trim()) {
-            Alert.alert('Error', 'Please enter either email or phone number');
+            toast.showError('Validation Error', 'Please enter either email or phone number');
             return;
         }
 
@@ -801,7 +818,7 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
         if (formData.email.trim()) {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(formData.email.trim())) {
-                Alert.alert('Error', 'Please enter a valid email address');
+                toast.showError('Validation Error', 'Please enter a valid email address');
                 return;
             }
         }
@@ -810,13 +827,13 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
         if (formData.phone.trim()) {
             const phoneRegex = /^\d{10}$/;
             if (!phoneRegex.test(formData.phone.trim())) {
-                Alert.alert('Error', 'Please enter a valid 10-digit phone number');
+                toast.showError('Validation Error', 'Please enter a valid 10-digit phone number');
                 return;
             }
         }
 
         if (!editingAdmin && !formData.password.trim()) {
-            Alert.alert('Error', 'Password is required for new sub-admin.');
+            toast.showError('Validation Error', 'Password is required for new sub-admin.');
             return;
         }
 
@@ -833,7 +850,7 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
             });
         } catch (error) {
             console.error('Error saving sub-admin:', error);
-            Alert.alert('Error', 'An error occurred while saving.');
+            toast.showError('Save Error', 'An error occurred while saving.');
         } finally {
             setIsLoading(false);
         }
@@ -964,6 +981,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const insets = useSafeAreaInsets();
   const { goBack, setActiveTab } = useAdminNavigation();
   const { userSession, logout, login } = useAuth();
+  const toast = createToastHelpers();
   const [modalVisible, setModalVisible] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [modalView, setModalView] = useState('list');
@@ -984,6 +1002,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
     newPassword: '',
     confirmPassword: '',
   });
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
 
 
   let [fontsLoaded] = useFonts({
@@ -1046,7 +1065,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
           await subAdminService.changeSubAdminPassword(data.uid, data.password.trim());
         }
 
-        Alert.alert('Success', 'Sub-admin updated successfully!');
+        toast.showSuccess('Success', 'Sub-admin updated successfully!');
       } else {
         // Create new sub-admin
         await subAdminService.createSubAdmin(
@@ -1059,7 +1078,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
             permissions: data.permissions,
           }
         );
-        Alert.alert('Success', 'Sub-admin created successfully!');
+        toast.showSuccess('Success', 'Sub-admin created successfully!');
       }
       
       // Reload sub-admins and close modal (for edit case)
@@ -1072,15 +1091,15 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
       
       // Handle specific validation errors
       if (error.message?.includes('Email address is already registered')) {
-        Alert.alert('Error', 'This email address is already registered.');
+        toast.showError('Error', 'This email address is already registered.');
       } else if (error.message?.includes('Phone number is already registered')) {
-        Alert.alert('Error', 'This phone number is already registered.');
+        toast.showError('Error', 'This phone number is already registered.');
       } else if (error.message?.includes('Email address is already registered by another user')) {
-        Alert.alert('Error', 'This email address is already registered by another user.');
+        toast.showError('Error', 'This email address is already registered by another user.');
       } else if (error.message?.includes('Phone number is already registered by another user')) {
-        Alert.alert('Error', 'This phone number is already registered by another user.');
+        toast.showError('Error', 'This phone number is already registered by another user.');
       } else {
-        Alert.alert('Error', error.message || 'Failed to save sub-admin. Please try again.');
+        toast.showError('Error', error.message || 'Failed to save sub-admin. Please try again.');
       }
     }
   };
@@ -1088,12 +1107,12 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const handleDeleteSubAdmin = async (uid: string) => {
     try {
       await subAdminService.deleteSubAdmin(uid);
-      Alert.alert('Success', 'Sub-admin deleted successfully and removed from the list.');
+      toast.showSuccess('Success', 'Sub-admin deleted successfully and removed from the list.');
       await loadSubAdmins();
-    } catch (error) {
-      console.error('Error deleting sub-admin:', error);
-      Alert.alert('Error', 'Failed to delete sub-admin. Please try again.');
-    }
+          } catch (error) {
+        console.error('Error deleting sub-admin:', error);
+        toast.showError('Error', 'Failed to delete sub-admin. Please try again.');
+      }
   };
 
 
@@ -1111,17 +1130,17 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
 
     // Validate password data
     if (!passwordData.newPassword.trim() || !passwordData.confirmPassword.trim()) {
-      Alert.alert('Error', 'Please fill in all password fields');
+      toast.showError('Validation Error', 'Please fill in all password fields');
       return;
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      toast.showError('Validation Error', 'Passwords do not match');
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+      toast.showError('Validation Error', 'Password must be at least 6 characters long');
       return;
     }
 
@@ -1140,13 +1159,13 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
                 subAdminToChangePassword.uid,
                 passwordData.newPassword
               );
-              Alert.alert('Success', 'Password changed successfully. The sub-admin will be logged out immediately.');
+              toast.showSuccess('Success', 'Password changed successfully. The sub-admin will be logged out immediately.');
               setModalView('list');
               setSubAdminToChangePassword(null);
               setPasswordData({ newPassword: '', confirmPassword: '' });
             } catch (error: any) {
               console.error('Error changing password:', error);
-              Alert.alert('Error', error.message || 'Failed to change password');
+              toast.showError('Error', error.message || 'Failed to change password');
             } finally {
               setChangingPassword(false);
             }
@@ -1214,7 +1233,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         }
 
         await promocodeService.updatePromocode(data.id, updateData);
-        Alert.alert('Success', 'Promocode updated successfully!');
+        toast.showSuccess('Success', 'Promocode updated successfully!');
       } else {
         // Create new promocode
         const createData: any = {
@@ -1242,7 +1261,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         }
 
         await promocodeService.createPromocode(userSession.uid, createData);
-        Alert.alert('Success', 'Promocode created successfully!');
+        toast.showSuccess('Success', 'Promocode created successfully!');
       }
       
       // Reload promocodes and close modal
@@ -1259,12 +1278,12 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const handleDeletePromocode = async (id: string) => {
     try {
       await promocodeService.deletePromocode(id);
-      Alert.alert('Success', 'Promocode permanently deleted.');
+      toast.showSuccess('Success', 'Promocode permanently deleted.');
       await loadPromocodes();
-    } catch (error) {
-      console.error('Error deleting promocode:', error);
-      Alert.alert('Error', 'Failed to delete promocode. Please try again.');
-    }
+          } catch (error) {
+        console.error('Error deleting promocode:', error);
+        toast.showError('Error', 'Failed to delete promocode. Please try again.');
+      }
   };
 
   const loadNotifications = async () => {
@@ -1297,7 +1316,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
           priority: data.priority,
           expiresAt: data.expiresAt,
         });
-        Alert.alert('Success', 'Notification updated successfully!');
+        toast.showSuccess('Success', 'Notification updated successfully!');
       } else {
         // Create new notification
         await notificationService.createNotification(userSession.uid, {
@@ -1307,7 +1326,7 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
           priority: data.priority,
           expiresAt: data.expiresAt,
         });
-        Alert.alert('Success', 'Notification created successfully!');
+        toast.showSuccess('Success', 'Notification created successfully!');
       }
       
       // Reload notifications and close modal
@@ -1324,37 +1343,28 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   const handleDeleteNotification = async (id: string) => {
     try {
       await notificationService.deleteNotification(id);
-      Alert.alert('Success', 'Notification permanently deleted.');
+      toast.showSuccess('Success', 'Notification permanently deleted.');
       await loadNotifications();
-    } catch (error) {
-      console.error('Error deleting notification:', error);
-      Alert.alert('Error', 'Failed to delete notification. Please try again.');
-    }
+          } catch (error) {
+        console.error('Error deleting notification:', error);
+        toast.showError('Error', 'Failed to delete notification. Please try again.');
+      }
   };
 
 
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-              router.replace('/');
-            } catch (error) {
-              console.error('Logout error:', error);
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+  const handleLogout = () => {
+    setLogoutModalVisible(true);
+  };
+
+  const confirmLogout = async () => {
+    try {
+      await logout();
+      router.replace('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.showError('Error', 'Failed to logout. Please try again.');
+    }
   };
 
   const openModal = (contentKey: string) => {
@@ -1479,11 +1489,11 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
       await userService.updateUser(userSession.uid, { displayName: trimmedName });
       const updatedSession = { ...userSession, displayName: trimmedName };
       await login(updatedSession);
-      Alert.alert('Success', 'Profile updated successfully.');
+      toast.showSuccess('Success', 'Profile updated successfully.');
       setModalVisible(false);
     } catch (error) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      toast.showError('Error', 'Failed to update profile. Please try again.');
     } finally {
       setIsSavingProfile(false);
     }
@@ -1589,7 +1599,13 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
         </View>
       </Modal>
 
-
+      {/* Logout Confirmation Modal */}
+      <LogoutConfirmationBox
+        visible={logoutModalVisible}
+        onConfirm={confirmLogout}
+        onCancel={() => setLogoutModalVisible(false)}
+        userName={userSession?.displayName}
+      />
 
     </View>
   );

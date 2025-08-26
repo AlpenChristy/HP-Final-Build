@@ -24,4 +24,6 @@ export const Colors = {
   white: '#FFFFFF',
   background: '#F0F2F5',
   text: '#1D3557',
+  red: '#DC2626',
+  redLighter: '#FFEBEE',
 };

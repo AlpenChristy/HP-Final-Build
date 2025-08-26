@@ -5,7 +5,10 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
+import DeleteOrderBox from '../../components/ui/DeleteOrderBox';
+import RejectOrderBox from '../../components/ui/RejectOrderBox';
+import Toast from '../../components/ui/Toast';
+import { useAdminNavigation } from '../../core/auth/AdminNavigationContext';
 import { DeliveryAgent, deliveryAgentService } from '../../core/services/deliveryAgentService';
 import { OrderData, orderService } from '../../core/services/orderService';
 import { Product, getProducts } from '../../core/services/productService';
@@ -48,6 +51,18 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
   const [selectedOrder, setSelectedOrder] = useState<OrderData | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  
+  // New confirmation modal states
+  const [deleteOrderModalVisible, setDeleteOrderModalVisible] = useState(false);
+  const [rejectOrderModalVisible, setRejectOrderModalVisible] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<{ id: string; customerName: string } | null>(null);
+  const [orderToReject, setOrderToReject] = useState<{ id: string; customerName: string } | null>(null);
+  
+  // Toast state
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [toastTitle, setToastTitle] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [deliveryAgents, setDeliveryAgents] = useState<DeliveryAgent[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -63,6 +78,13 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
+
+  const showToast = (type: 'success' | 'error', title: string, message: string) => {
+    setToastType(type);
+    setToastTitle(title);
+    setToastMessage(message);
+    setToastVisible(true);
+  };
   
   // Subscribe to orders in real-time; fetch delivery agents and products once
   useEffect(() => {
@@ -282,16 +304,16 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
       // Find the order to check if it was a reassignment
       const order = orders.find(o => o.id === orderId);
       const isReassignment = order?.deliveryAgentName && order?.deliveryAgentId !== agentId;
-      Alert.alert('Success', isReassignment ? 'Delivery agent changed successfully' : 'Delivery agent assigned successfully');
+      showToast('success', 'Success', isReassignment ? 'Delivery agent changed successfully' : 'Delivery agent assigned successfully');
     } catch (error) {
       console.error('Error assigning delivery agent:', error);
-      Alert.alert('Error', 'Failed to assign delivery agent');
+      showToast('error', 'Error', 'Failed to assign delivery agent');
     }
   }
 
   const handleBulkAssignment = async () => {
     if (!selectedAgent) {
-      Alert.alert('Error', 'Please select a delivery agent');
+      showToast('error', 'Error', 'Please select a delivery agent');
       return;
     }
 
@@ -307,10 +329,10 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
 
       setSelectedOrders([]);
       setDetailModalVisible(false);
-      Alert.alert('Success', 'Orders assigned successfully');
+      showToast('success', 'Success', 'Orders assigned successfully');
     } catch (error) {
       console.error('Error in bulk assignment:', error);
-      Alert.alert('Error', 'Failed to assign orders');
+      showToast('error', 'Error', 'Failed to assign orders');
     }
   }
   
@@ -318,7 +340,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
     try {
       // Build items from selectedItems
       if (!newOrderData.selectedItems.length) {
-        Alert.alert('Error', 'Please select at least one product');
+        showToast('error', 'Error', 'Please select at least one product');
         return;
       }
 
@@ -337,7 +359,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
         .filter(Boolean) as { productId: string; userId: string; product: Product; quantity: number; }[];
 
       if (items.length === 0) {
-        Alert.alert('Error', 'Please provide quantity for selected products');
+        showToast('error', 'Error', 'Please provide quantity for selected products');
         return;
       }
 
@@ -360,36 +382,33 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
       setCreateModalVisible(false);
       // Reset form
       setNewOrderData({ customerName: '', phone: '', address: '', selectedItems: [] });
-      Alert.alert('Success', 'Order created successfully');
+      showToast('success', 'Success', 'Order created successfully');
     } catch (error) {
       console.error('Error creating order:', error);
-      Alert.alert('Error', 'Failed to create order');
+      showToast('error', 'Error', 'Failed to create order');
     }
   }
 
-  const handleDeleteOrder = async (orderId: string, customerName: string) => {
-    Alert.alert(
-      'Delete Order',
-      `Are you sure you want to delete order #${orderId} for ${customerName}? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await orderService.deleteOrder(orderId);
-              // Local state will update via realtime listener; optional optimistic update:
-              setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
-              Alert.alert('Success', 'Order deleted successfully');
-            } catch (error) {
-              console.error('Error deleting order:', error);
-              Alert.alert('Error', 'Failed to delete order');
-            }
-          },
-        },
-      ]
-    );
+  const handleDeleteOrder = (orderId: string, customerName: string) => {
+    setOrderToDelete({ id: orderId, customerName });
+    setDeleteOrderModalVisible(true);
+  }
+
+  const confirmDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    
+    try {
+      await orderService.deleteOrder(orderToDelete.id);
+      // Local state will update via realtime listener; optional optimistic update:
+      setOrders(prevOrders => prevOrders.filter(order => order.id !== orderToDelete.id));
+      showToast('success', 'Success', 'Order deleted successfully');
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      showToast('error', 'Error', 'Failed to delete order');
+    } finally {
+      setDeleteOrderModalVisible(false);
+      setOrderToDelete(null);
+    }
   }
 
   const handleDeleteNote = async (orderId: string) => {
@@ -405,10 +424,10 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
             try {
               await orderService.deleteDeliveryNotes(orderId);
               // Local state will update via realtime listener
-              Alert.alert('Success', 'Delivery note deleted successfully');
+              showToast('success', 'Success', 'Delivery note deleted successfully');
             } catch (error) {
               console.error('Error deleting delivery note:', error);
-              Alert.alert('Error', 'Failed to delete delivery note');
+              showToast('error', 'Error', 'Failed to delete delivery note');
             }
           },
         },
@@ -416,28 +435,25 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
     );
   }
 
-  const handleRejectOrder = async (orderId: string, customerName: string) => {
-    Alert.alert(
-      'Reject Order',
-      `Are you sure you want to reject order #${orderId} for ${customerName}? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Reject Order',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await orderService.updateOrderStatus(orderId, 'cancelled');
-              // Local state will update via realtime listener
-              Alert.alert('Success', 'Order rejected successfully');
-            } catch (error) {
-              console.error('Error rejecting order:', error);
-              Alert.alert('Error', 'Failed to reject order');
-            }
-          },
-        },
-      ]
-    );
+  const handleRejectOrder = (orderId: string, customerName: string) => {
+    setOrderToReject({ id: orderId, customerName });
+    setRejectOrderModalVisible(true);
+  }
+
+  const confirmRejectOrder = async () => {
+    if (!orderToReject) return;
+    
+    try {
+      await orderService.updateOrderStatus(orderToReject.id, 'cancelled');
+      // Local state will update via realtime listener
+      showToast('success', 'Success', 'Order rejected successfully');
+    } catch (error) {
+      console.error('Error rejecting order:', error);
+      showToast('error', 'Error', 'Failed to reject order');
+    } finally {
+      setRejectOrderModalVisible(false);
+      setOrderToReject(null);
+    }
   }
 
   const filteredActiveOrders = selectedFilter === 'all' ? activeOrders : 
@@ -733,7 +749,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                         style={[styles.assignButton, !selectedAgent && styles.assignButtonDisabled]}
                         onPress={() => {
                           if (!selectedAgent) {
-                            Alert.alert('Error', 'Please select a delivery agent');
+                            showToast('error', 'Error', 'Please select a delivery agent');
                             return;
                           }
                           const agent = deliveryAgents.find(a => a.id === selectedAgent);
@@ -742,22 +758,7 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                           if (selectedOrder.id === 'multiple') {
                             handleBulkAssignment();
                           } else if (selectedOrder.id) {
-                            // Check if this is a reassignment
-                            if (selectedOrder.deliveryAgentName && selectedOrder.deliveryAgentId !== agent.id) {
-                              Alert.alert(
-                                'Change Delivery Agent',
-                                `Are you sure you want to change the delivery agent from "${selectedOrder.deliveryAgentName}" to "${agent.name}"?`,
-                                [
-                                  { text: 'Cancel', style: 'cancel' },
-                                  { 
-                                    text: 'Change Agent', 
-                                    onPress: () => handleAssignDeliveryAgent(selectedOrder.id!, agent.id!, agent.name)
-                                  }
-                                ]
-                              );
-                            } else {
-                              handleAssignDeliveryAgent(selectedOrder.id, agent.id!, agent.name);
-                            }
+                            handleAssignDeliveryAgent(selectedOrder.id, agent.id!, agent.name);
                           }
                         }}
                       >
@@ -864,6 +865,33 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
             </View>
         </View>
       </Modal>
+
+      {/* Delete Order Confirmation Modal */}
+      <DeleteOrderBox
+        visible={deleteOrderModalVisible}
+        onConfirm={confirmDeleteOrder}
+        onCancel={() => setDeleteOrderModalVisible(false)}
+        orderId={orderToDelete?.id}
+        customerName={orderToDelete?.customerName}
+      />
+
+      {/* Reject Order Confirmation Modal */}
+      <RejectOrderBox
+        visible={rejectOrderModalVisible}
+        onConfirm={confirmRejectOrder}
+        onCancel={() => setRejectOrderModalVisible(false)}
+        orderId={orderToReject?.id}
+        customerName={orderToReject?.customerName}
+      />
+
+      {/* Toast */}
+      <Toast
+        visible={toastVisible}
+        type={toastType}
+        title={toastTitle}
+        message={toastMessage}
+        onClose={() => setToastVisible(false)}
+      />
       </View>
     </View>
   );

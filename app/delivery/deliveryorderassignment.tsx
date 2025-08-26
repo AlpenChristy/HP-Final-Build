@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle, MapPin, Package, Phone, Truck, X } from 'lucide
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import SuccessBox from '../../components/ui/SuccessBox';
 import { useAuth } from '../../core/auth/AuthContext';
 import { OrderData, orderService } from '../../core/services/orderService';
 
@@ -34,6 +35,8 @@ export default function DeliveryOrdersScreen() {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [deliveryNote, setDeliveryNote] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
@@ -113,7 +116,9 @@ export default function DeliveryOrdersScreen() {
         )
       );
 
-      Alert.alert('Success', `Order status updated to ${getStatusDisplayText(newStatus)}`);
+      // Show success modal
+      setSuccessMessage(`Order status updated to ${getStatusDisplayText(newStatus)}`);
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error updating order status:', error);
       Alert.alert('Error', 'Failed to update order status');
@@ -144,7 +149,9 @@ export default function DeliveryOrdersScreen() {
       setSelectedOrderId(null);
       setDeliveryNote('');
       
-      Alert.alert('Success', 'Order marked as delivered');
+      // Show success modal
+      setSuccessMessage('Order marked as delivered successfully');
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error marking order as delivered:', error);
       Alert.alert('Error', 'Failed to mark order as delivered');
@@ -353,6 +360,15 @@ export default function DeliveryOrdersScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Success Modal */}
+      <SuccessBox
+        visible={showSuccessModal}
+        title="Success"
+        message={successMessage}
+        confirmText="Continue"
+        onConfirm={() => setShowSuccessModal(false)}
+      />
     </View>
   );
 }

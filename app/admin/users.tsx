@@ -1,11 +1,12 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, MapPin, Search, User, X } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
-import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ArrowLeft, MapPin, Search, Trash2, User, X } from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Toast from '../../components/ui/Toast';
+import { useAdminNavigation } from '../../core/auth/AdminNavigationContext';
 import { useAuth } from '../../core/auth/AuthContext';
-import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
 import { orderService } from '../../core/services/orderService';
 import { userService } from '../../core/services/userService';
 
@@ -52,10 +53,27 @@ export default function CustomerUsersScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // Toast state
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+  const [toastTitle, setToastTitle] = useState('');
+  const [toastMessage, setToastMessage] = useState('');
+  
+  // Delete customer modal state
+  const [deleteCustomerModalVisible, setDeleteCustomerModalVisible] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<CustomerUser | null>(null);
 
   let [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
   });
+
+  const showToast = (type: 'success' | 'error', title: string, message: string) => {
+    setToastType(type);
+    setToastTitle(title);
+    setToastMessage(message);
+    setToastVisible(true);
+  };
 
   useEffect(() => {
     if (userSession?.uid) {
@@ -126,7 +144,7 @@ export default function CustomerUsersScreen() {
       setCustomers(customersWithStats);
     } catch (error) {
       console.error('Error loading customers:', error);
-      Alert.alert('Error', 'Failed to load customer data.');
+      showToast('error', 'Error', 'Failed to load customer data.');
     } finally {
       setIsLoading(false);
     }
@@ -137,64 +155,60 @@ export default function CustomerUsersScreen() {
     setModalVisible(true);
   };
 
-  const handleDeleteCustomer = async () => {
+  const handleDeleteCustomer = () => {
     if (!selectedCustomer) return;
+    
+    setCustomerToDelete(selectedCustomer);
+    setDeleteCustomerModalVisible(true);
+  };
 
-    Alert.alert(
-      'Delete Customer',
-      `Are you sure you want to delete ${selectedCustomer.displayName}? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsDeleting(true);
-              // Here you would implement the actual deletion logic
-              // For now, we'll just remove from the local state
-              setCustomers(prev => prev.filter(customer => customer.uid !== selectedCustomer.uid));
-              setSelectedCustomer(null);
-              setModalVisible(false);
-              Alert.alert('Success', 'Customer deleted successfully.');
-            } catch (error) {
-              console.error('Error deleting customer:', error);
-              Alert.alert('Error', 'Failed to delete customer.');
-            } finally {
-              setIsDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+  const confirmDeleteCustomer = async () => {
+    if (!customerToDelete) return;
+
+    try {
+      setIsDeleting(true);
+      // Here you would implement the actual deletion logic
+      // For now, we'll just remove from the local state
+      setCustomers(prev => prev.filter(customer => customer.uid !== customerToDelete.uid));
+      setSelectedCustomer(null);
+      setModalVisible(false);
+      showToast('success', 'Success', 'Customer deleted successfully.');
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      showToast('error', 'Error', 'Failed to delete customer.');
+    } finally {
+      setIsDeleting(false);
+      setDeleteCustomerModalVisible(false);
+      setCustomerToDelete(null);
+    }
   };
 
   const handleChangePassword = async () => {
     if (!selectedCustomer) return;
 
     if (!newPassword.trim() || !confirmPassword.trim()) {
-      Alert.alert('Error', 'Please fill in all password fields.');
+      showToast('error', 'Error', 'Please fill in all password fields.');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
+      showToast('error', 'Error', 'Passwords do not match.');
       return;
     }
 
     if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long.');
+      showToast('error', 'Error', 'Password must be at least 6 characters long.');
       return;
     }
 
     try {
       await userService.updateUserPassword(selectedCustomer.uid, newPassword);
-      Alert.alert('Success', 'Password changed successfully.');
+      showToast('success', 'Success', 'Password changed successfully.');
       setNewPassword('');
       setConfirmPassword('');
     } catch (error) {
       console.error('Error changing password:', error);
-      Alert.alert('Error', 'Failed to change password.');
+      showToast('error', 'Error', 'Failed to change password.');
     }
   };
 
@@ -264,34 +278,51 @@ export default function CustomerUsersScreen() {
         ) : (
           <View style={styles.customersList}>
             {filteredCustomers.map((customer) => (
-              <TouchableOpacity
-                key={customer.uid}
-                style={styles.customerCard}
-                onPress={() => handleCustomerPress(customer)}
-              >
-                <View style={styles.customerHeader}>
-                  <View style={styles.customerInfo}>
-                    <Text style={styles.customerName}>{customer.displayName}</Text>
-                    {customer.email && (
-                      <Text style={styles.customerEmail}>{customer.email}</Text>
+              <View key={customer.uid} style={styles.customerCardContainer}>
+                <TouchableOpacity
+                  style={styles.customerCard}
+                  onPress={() => handleCustomerPress(customer)}
+                >
+                  <View style={styles.customerHeader}>
+                    <View style={styles.customerInfo}>
+                      <Text style={styles.customerName}>{customer.displayName}</Text>
+                      {customer.email && (
+                        <Text style={styles.customerEmail}>{customer.email}</Text>
+                      )}
+                    </View>
+                    {customer.phoneNumber && (
+                      <Text style={styles.customerPhone}>{customer.phoneNumber}</Text>
                     )}
                   </View>
-                  {customer.phoneNumber && (
-                    <Text style={styles.customerPhone}>{customer.phoneNumber}</Text>
-                  )}
-                </View>
+                  
+                  <View style={styles.customerStats}>
+                    <View style={styles.statItem}>
+                      <Text style={styles.statLabel}>Orders</Text>
+                      <Text style={styles.statValue}>{customer.totalOrders}</Text>
+                    </View>
+                    <View style={styles.statItemCenter}>
+                      <Text style={styles.statLabel}>Joined</Text>
+                      <Text style={styles.statValue}>{formatDate(customer.createdAt)}</Text>
+                    </View>
+                    <View style={styles.statItemRight}>
+                      <View style={styles.actionPlaceholder} />
+                    </View>
+                  </View>
+                </TouchableOpacity>
                 
-                <View style={styles.customerStats}>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Orders</Text>
-                    <Text style={styles.statValue}>{customer.totalOrders}</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Text style={styles.statLabel}>Joined</Text>
-                    <Text style={styles.statValue}>{formatDate(customer.createdAt)}</Text>
-                  </View>
+                <View style={styles.actionButtonsContainer}>
+                  <TouchableOpacity
+                    style={[styles.actionIconButton, styles.deleteButton]}
+                    onPress={() => {
+                      setCustomerToDelete(customer);
+                      setDeleteCustomerModalVisible(true);
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Trash2 size={18} color={Colors.red} />
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
@@ -412,25 +443,133 @@ export default function CustomerUsersScreen() {
                    </TouchableOpacity>
                  </View>
 
-                 <View style={styles.modalActions}>
-                   <TouchableOpacity
-                     style={[styles.actionButton, styles.deleteButton]}
-                     onPress={handleDeleteCustomer}
-                     disabled={isDeleting}
-                   >
-                     <Text style={styles.actionButtonText}>
-                       {isDeleting ? 'Deleting...' : 'Delete Customer'}
-                     </Text>
-                   </TouchableOpacity>
-                 </View>
+
               </ScrollView>
             )}
           </View>
         </View>
       </Modal>
+
+      {/* Delete Customer Confirmation Modal */}
+      <DeleteCustomerBox
+        visible={deleteCustomerModalVisible}
+        onConfirm={confirmDeleteCustomer}
+        onCancel={() => setDeleteCustomerModalVisible(false)}
+        customerName={customerToDelete?.displayName}
+        customerEmail={customerToDelete?.email}
+      />
+
+      {/* Toast */}
+      <Toast
+        visible={toastVisible}
+        type={toastType}
+        title={toastTitle}
+        message={toastMessage}
+        onClose={() => setToastVisible(false)}
+      />
     </View>
   );
 }
+
+// DeleteCustomerBox Component
+const DeleteCustomerBox: React.FC<{
+  visible: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  customerName?: string;
+  customerEmail?: string;
+}> = ({ visible, onConfirm, onCancel, customerName, customerEmail }) => {
+  const scale = useRef(new Animated.Value(0.8)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(scale, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(scale, {
+          toValue: 0.8,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible, scale, opacity]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onCancel}
+    >
+      <View style={deleteCustomerStyles.overlay}>
+        <Animated.View
+          style={[
+            deleteCustomerStyles.container,
+            {
+              transform: [{ scale }],
+              opacity,
+            },
+          ]}
+        >
+          <View style={deleteCustomerStyles.iconContainer}>
+            <User size={32} color={Colors.red} />
+          </View>
+          <Text style={deleteCustomerStyles.title}>
+            Delete Customer
+          </Text>
+          <Text style={deleteCustomerStyles.message}>
+            Are you sure you want to delete {customerName}? This action cannot be undone.
+          </Text>
+          
+          {customerEmail && (
+            <View style={deleteCustomerStyles.customerInfo}>
+              <Text style={deleteCustomerStyles.customerEmail}>{customerEmail}</Text>
+            </View>
+          )}
+
+          <View style={deleteCustomerStyles.buttonContainer}>
+            <TouchableOpacity
+              style={[deleteCustomerStyles.button, deleteCustomerStyles.cancelButton]}
+              onPress={onCancel}
+              activeOpacity={0.8}
+            >
+              <Text style={deleteCustomerStyles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[deleteCustomerStyles.button, deleteCustomerStyles.deleteButton]}
+              onPress={onConfirm}
+              activeOpacity={0.8}
+            >
+              <User size={16} color={Colors.white} />
+              <Text style={deleteCustomerStyles.deleteButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+};
 
 const styles = StyleSheet.create({
   loadingContainer: {
@@ -520,18 +659,41 @@ const styles = StyleSheet.create({
   customersList: {
     gap: 16,
   },
-  customerCard: {
+  customerCardContainer: {
     backgroundColor: Colors.surface,
     borderRadius: 16,
-    padding: 20,
     shadowColor: '#959DA5',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    marginBottom: 16,
+    position: 'relative',
+  },
+  customerCard: {
+    padding: 20,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 8,
+    borderRadius: 16,
+  },
+  actionButtonsContainer: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 10,
+  },
+  actionIconButton: {
+    backgroundColor: Colors.primaryLighter,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButton: {
+    backgroundColor: Colors.redLighter,
   },
   customerHeader: {
     flexDirection: 'row',
@@ -573,9 +735,25 @@ const styles = StyleSheet.create({
      borderTopWidth: 1,
      borderTopColor: Colors.border,
    },
+   statsLeft: {
+     flexDirection: 'row',
+     gap: 24,
+   },
    statItem: {
      alignItems: 'center',
      flex: 1,
+   },
+   statItemCenter: {
+     alignItems: 'center',
+     flex: 1,
+   },
+   statItemRight: {
+     alignItems: 'center',
+     flex: 1,
+   },
+   actionPlaceholder: {
+     width: 40,
+     height: 40,
    },
    statLabel: {
      fontSize: 12,
@@ -684,9 +862,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-     deleteButton: {
-     backgroundColor: Colors.red,
-   },
+
    passwordButton: {
      backgroundColor: Colors.yellow,
    },
@@ -714,4 +890,100 @@ const styles = StyleSheet.create({
      borderWidth: 1,
      borderColor: Colors.border,
    },
+});
+
+// DeleteCustomerBox Styles
+const deleteCustomerStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    zIndex: 9999,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 320,
+    padding: 28,
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 20,
+    zIndex: 10000,
+  },
+  iconContainer: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.redLighter,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.text,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  message: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  customerInfo: {
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    width: '100%',
+  },
+  customerEmail: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 16,
+    width: '100%',
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  cancelButton: {
+    backgroundColor: Colors.border,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  deleteButton: {
+    backgroundColor: Colors.red,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.white,
+  },
 });

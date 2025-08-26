@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  Image,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Dimensions,
+    Image,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 // Import the hook to get safe area dimensions
@@ -18,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Import LinearGradient for the gradient effect
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import PromocodeDetailBox from '../../components/ui/PromocodeDetailBox';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useCart } from '../../core/context/CartContext';
 import { PromocodeData, promocodeService } from '../../core/services/promocodeService';
@@ -52,6 +52,10 @@ export default function CustomerHomeScreen() {
   const [featuredPromocodes, setFeaturedPromocodes] = useState<PromocodeData[]>([]);
   const [isLoadingPromocodes, setIsLoadingPromocodes] = useState(true);
   const [activePromoIndex, setActivePromoIndex] = useState(0);
+  
+  // State for promocode detail modal
+  const [promocodeDetailVisible, setPromocodeDetailVisible] = useState(false);
+  const [selectedPromocode, setSelectedPromocode] = useState<PromocodeData | undefined>(undefined);
 
   // Load featured promocodes on component mount
   useEffect(() => {
@@ -109,14 +113,8 @@ export default function CustomerHomeScreen() {
   };
 
   const handleClaimOffer = (promocode?: PromocodeData) => {
-    if (promocode) {
-      Alert.alert(
-        'Promocode Details', 
-        `Code: ${promocode.code}\nDiscount: ${getDiscountText(promocode)}\n${promocode.description || 'No description available'}\n\nApply this code during checkout to get your discount!`
-      );
-    } else {
-      Alert.alert('Weekly Offer', 'Congratulations! Your 10% discount has been applied to your account.');
-    }
+    setSelectedPromocode(promocode);
+    setPromocodeDetailVisible(true);
   };
 
   const handleCartPress = () => {
@@ -301,6 +299,16 @@ export default function CustomerHomeScreen() {
            
             </View>
         </ScrollView>
+        
+        {/* Promocode Detail Modal */}
+        <PromocodeDetailBox
+          visible={promocodeDetailVisible}
+          promocode={selectedPromocode}
+          onClose={() => {
+            setPromocodeDetailVisible(false);
+            setSelectedPromocode(undefined);
+          }}
+        />
     </View>
   );
 }

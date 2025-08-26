@@ -1,18 +1,19 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { router } from 'expo-router';
-import { ArrowLeft, Bell, ChevronRight, Edit, HelpCircle, Lock, LogOut, Mail, MapPin, Phone, Tag, Trash2, Truck, User, X, Eye, EyeOff } from 'lucide-react-native';
+import { ArrowLeft, Bell, ChevronRight, Edit, Eye, EyeOff, HelpCircle, Lock, LogOut, Mail, MapPin, Phone, Tag, Trash2, Truck, User, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LogoutConfirmationBox from '../../components/ui/LogoutConfirmationBox';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useAddress } from '../../core/context/AddressContext';
 import { useConsumerNumber } from '../../core/context/ConsumerNumberContext';
+import { customerAuthService } from '../../core/services/customerAuthService';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { orderService } from '../../core/services/orderService';
 import { UserData, userService } from '../../core/services/userService';
 import { WhatsAppOtpService } from '../../core/services/whatsappOtpService';
 import { createToastHelpers } from '../../core/utils/toastUtils';
-import { customerAuthService } from '../../core/services/customerAuthService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -833,6 +834,9 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  
+  // State for logout confirmation modal
+  const [logoutConfirmationVisible, setLogoutConfirmationVisible] = useState(false);
 
   // Load user data and order statistics from database
   const loadUserDataAndStats = async (isRefresh = false) => {
@@ -901,30 +905,20 @@ export default function ProfileScreen() {
 
 
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-              router.replace('/');
-            } catch (error) {
-              console.error('Logout error:', error);
-              toast.showGenericError('Failed to logout. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+  const handleLogout = () => {
+    setLogoutConfirmationVisible(true);
+  };
+
+  const confirmLogout = async () => {
+    try {
+      await logout();
+      router.replace('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.showGenericError('Failed to logout. Please try again.');
+    } finally {
+      setLogoutConfirmationVisible(false);
+    }
   };
 
   // Handle address updates
@@ -1143,6 +1137,14 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+      
+      {/* Logout Confirmation Modal */}
+      <LogoutConfirmationBox
+        visible={logoutConfirmationVisible}
+        onConfirm={confirmLogout}
+        onCancel={() => setLogoutConfirmationVisible(false)}
+        userName={user?.name}
+      />
     </View>
   );
 }
