@@ -815,7 +815,14 @@ export default function AdminOrdersScreen({ navigation }: AdminOrdersScreenProps
                         </View>
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Delivery Address</Text>
-                            <TextInput style={[styles.input, {height: 80}]} value={newOrderData.address} onChangeText={text => setNewOrderData({...newOrderData, address: text})} placeholder="Enter full address" multiline />
+                            <TextInput 
+                                style={[styles.input, {height: 80, textAlignVertical: 'top'}]} 
+                                value={newOrderData.address} 
+                                onChangeText={text => setNewOrderData({...newOrderData, address: text})} 
+                                placeholder="Enter full address" 
+                                placeholderTextColor={Colors.textSecondary}
+                                multiline 
+                            />
                         </View>
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Select Products</Text>

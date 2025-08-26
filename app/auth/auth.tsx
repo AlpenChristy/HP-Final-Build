@@ -22,8 +22,8 @@ import { customerAuthService } from '../../core/services/customerAuthService';
 import { deliveryAuthService } from '../../core/services/deliveryAuthService';
 import { subAdminAuthService } from '../../core/services/subAdminAuthService';
 import { userService } from '../../core/services/userService';
-import { SessionManager, UserSession } from '../../core/session/sessionManager';
 import { WhatsAppOtpService } from '../../core/services/whatsappOtpService';
+import { SessionManager, UserSession } from '../../core/session/sessionManager';
 
 interface FormData {
   name: string;
@@ -1182,11 +1182,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   iconToggleButton: {
-    padding: 12,
-    borderRadius: 25,
-    marginHorizontal: 6,
-    width: 50,
-    height: 50,
+    padding: 8,
+    borderRadius: 18,
+    marginHorizontal: 3,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },

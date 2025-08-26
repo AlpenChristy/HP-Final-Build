@@ -1,14 +1,13 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import { ArrowLeft, Search, User, Phone, Mail, MapPin, Calendar, Eye, EyeOff, Edit, Trash2, X } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Search, User, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../core/auth/AuthContext';
 import { useAdminNavigation } from '../../core/auth/StableAdminLayout';
-import { userService } from '../../core/services/userService';
 import { orderService } from '../../core/services/orderService';
+import { userService } from '../../core/services/userService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -270,16 +269,28 @@ export default function CustomerUsersScreen() {
                 style={styles.customerCard}
                 onPress={() => handleCustomerPress(customer)}
               >
-                                 <View style={styles.customerHeader}>
-                   <View style={styles.customerInfo}>
-                     <Text style={styles.customerName}>{customer.displayName}</Text>
-                   </View>
-                   {customer.phoneNumber && (
-                     <Text style={styles.customerPhone}>{customer.phoneNumber}</Text>
-                   )}
-                 </View>
-
+                <View style={styles.customerHeader}>
+                  <View style={styles.customerInfo}>
+                    <Text style={styles.customerName}>{customer.displayName}</Text>
+                    {customer.email && (
+                      <Text style={styles.customerEmail}>{customer.email}</Text>
+                    )}
+                  </View>
+                  {customer.phoneNumber && (
+                    <Text style={styles.customerPhone}>{customer.phoneNumber}</Text>
+                  )}
+                </View>
                 
+                <View style={styles.customerStats}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Orders</Text>
+                    <Text style={styles.statValue}>{customer.totalOrders}</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Joined</Text>
+                    <Text style={styles.statValue}>{formatDate(customer.createdAt)}</Text>
+                  </View>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
@@ -511,40 +522,71 @@ const styles = StyleSheet.create({
   },
   customerCard: {
     backgroundColor: Colors.surface,
-    borderRadius: 20,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#959DA5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
     borderColor: Colors.border,
-    marginBottom: 4,
+    marginBottom: 8,
   },
   customerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 0,
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
   customerInfo: {
     flex: 1,
+    marginRight: 12,
   },
-     customerName: {
-     fontSize: 20,
-     fontFamily: 'Inter_700Bold',
-     color: Colors.text,
-     marginBottom: 0,
-   },
-   customerPhone: {
-     fontSize: 16,
+  customerName: {
+    fontSize: 18,
+    fontFamily: 'Inter_600SemiBold',
+    color: Colors.text,
+    marginBottom: 4,
+  },
+     customerPhone: {
+     fontSize: 14,
      fontFamily: 'Inter_500Medium',
      color: Colors.primary,
      backgroundColor: Colors.primaryLighter,
-     paddingHorizontal: 12,
-     paddingVertical: 6,
-     borderRadius: 20,
+     paddingHorizontal: 10,
+     paddingVertical: 4,
+     borderRadius: 12,
+     alignSelf: 'flex-start',
+   },
+   customerEmail: {
+     fontSize: 14,
+     fontFamily: 'Inter_400Regular',
+     color: Colors.textSecondary,
+     marginTop: 2,
+   },
+   customerStats: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
+     paddingTop: 12,
+     borderTopWidth: 1,
+     borderTopColor: Colors.border,
+   },
+   statItem: {
+     alignItems: 'center',
+     flex: 1,
+   },
+   statLabel: {
+     fontSize: 12,
+     fontFamily: 'Inter_400Regular',
+     color: Colors.textSecondary,
+     marginBottom: 4,
+   },
+   statValue: {
+     fontSize: 14,
+     fontFamily: 'Inter_600SemiBold',
+     color: Colors.text,
    },
    statusBadge: {
      paddingHorizontal: 8,

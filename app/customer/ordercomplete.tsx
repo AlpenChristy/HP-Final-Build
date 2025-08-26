@@ -250,7 +250,7 @@ export default function OrderPlacedScreen() {
             </Text>
             <TouchableOpacity 
                 style={styles.supportButton}
-                onPress={() => Linking.openURL('tel:+919876543210')}
+                onPress={() => Linking.openURL('tel:02662222788')}
             >
                 <Phone size={20} color={Colors.white} />
                 <Text style={styles.supportButtonText}>Call Support</Text>

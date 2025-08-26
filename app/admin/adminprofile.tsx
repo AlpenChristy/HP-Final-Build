@@ -659,8 +659,10 @@ const AddNotificationContent = ({ editingNotification, onSave }: { editingNotifi
                     value={formData.message} 
                     onChangeText={text => setFormData({...formData, message: text})} 
                     placeholder="Enter notification message" 
+                    placeholderTextColor={Colors.textSecondary}
                     multiline
                     numberOfLines={4}
+                    textAlignVertical="top"
                 />
             </View>
 
