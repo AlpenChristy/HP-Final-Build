@@ -72,6 +72,35 @@ export const orderService = {
       cleanedData.appliedPromocode = cleanedPromocode;
     }
     
+    // Clean product data in cart items to remove undefined values
+    if (cleanedData.items && Array.isArray(cleanedData.items)) {
+      cleanedData.items = cleanedData.items.map(item => {
+        const cleanedItem = { ...item };
+        
+        // Clean the product object within each cart item
+        if (cleanedItem.product) {
+          const cleanedProduct: any = {};
+          
+          // Only include defined values for product fields
+          if (cleanedItem.product.id !== undefined) cleanedProduct.id = cleanedItem.product.id;
+          if (cleanedItem.product.name !== undefined) cleanedProduct.name = cleanedItem.product.name;
+          if (cleanedItem.product.type !== undefined) cleanedProduct.type = cleanedItem.product.type;
+          if (cleanedItem.product.weight !== undefined) cleanedProduct.weight = cleanedItem.product.weight;
+          if (cleanedItem.product.price !== undefined) cleanedProduct.price = cleanedItem.product.price;
+          if (cleanedItem.product.originalPrice !== undefined) cleanedProduct.originalPrice = cleanedItem.product.originalPrice;
+          if (cleanedItem.product.inStock !== undefined) cleanedProduct.inStock = cleanedItem.product.inStock;
+          if (cleanedItem.product.quantity !== undefined) cleanedProduct.quantity = cleanedItem.product.quantity;
+          if (cleanedItem.product.image !== undefined) cleanedProduct.image = cleanedItem.product.image;
+          if (cleanedItem.product.description !== undefined) cleanedProduct.description = cleanedItem.product.description;
+          if (cleanedItem.product.createdAt !== undefined) cleanedProduct.createdAt = cleanedItem.product.createdAt;
+          
+          cleanedItem.product = cleanedProduct;
+        }
+        
+        return cleanedItem;
+      });
+    }
+    
     return cleanedData;
   },
 

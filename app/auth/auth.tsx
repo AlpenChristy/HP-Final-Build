@@ -3,15 +3,15 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { Eye, EyeOff, Mail, Phone, User, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -106,7 +106,7 @@ const LoginForm = ({
         <View style={styles.passwordInputContainer}>
           <TextInput
             style={styles.passwordInput}
-            placeholder="Password"
+            placeholder="Password (6+ chars, 1 capital, 1 small)"
             value={formData.password}
             onChangeText={(text) => updateFormData('password', text)}
             secureTextEntry={!showPassword}
@@ -165,7 +165,7 @@ const RegisterForm = ({
         <User size={20} color={Colors.textSecondary} style={styles.inputIcon} />
         <TextInput
           style={styles.input}
-          placeholder="Full Name"
+          placeholder="Full Name *"
           value={formData.name}
           onChangeText={(text) => updateFormData('name', text)}
           placeholderTextColor={Colors.textSecondary}
@@ -188,7 +188,7 @@ const RegisterForm = ({
         <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
         <TextInput
           style={styles.input}
-          placeholder="Email Address (Optional)"
+          placeholder="Email Address (Optional) - Valid format required"
           value={formData.email}
           onChangeText={(text) => updateFormData('email', text)}
           autoCapitalize="none"
@@ -483,6 +483,35 @@ export default function AuthScreen() {
       }
       if (formData.password.length < 6) {
         toast.showError('Validation Error', 'Password must be at least 6 characters long.');
+        return false;
+      }
+      
+      // Full name validation - make it mandatory
+      if (!formData.name.trim()) {
+        toast.showError('Validation Error', 'Full name is required.');
+        return false;
+      }
+      
+      // Email format validation (only if email is provided)
+      if (formData.email && formData.email.trim()) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+          toast.showError('Validation Error', 'Please enter a valid email address.');
+          return false;
+        }
+      }
+      
+      // Password complexity validation - at least 6 characters with one capital and one small letter
+      if (formData.password.length < 6) {
+        toast.showError('Validation Error', 'Password must be at least 6 characters long.');
+        return false;
+      }
+      
+      const hasUpperCase = /[A-Z]/.test(formData.password);
+      const hasLowerCase = /[a-z]/.test(formData.password);
+      
+      if (!hasUpperCase || !hasLowerCase) {
+        toast.showError('Validation Error', 'Password must contain at least one capital letter and one small letter.');
         return false;
       }
     } else {

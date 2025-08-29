@@ -35,14 +35,27 @@ export const addProduct = async (productData: Omit<Product, 'id' | 'createdAt'>,
       imageUrl = await getDownloadURL(storageRef);
     }
     
+    // Clean the product data to remove undefined values
+    const cleanedProductData: any = {};
+    
+    // Only include defined values
+    if (productData.name !== undefined) cleanedProductData.name = productData.name;
+    if (productData.type !== undefined) cleanedProductData.type = productData.type;
+    if (productData.weight !== undefined) cleanedProductData.weight = productData.weight;
+    if (productData.price !== undefined) cleanedProductData.price = productData.price;
+    if (productData.originalPrice !== undefined) cleanedProductData.originalPrice = productData.originalPrice;
+    if (productData.inStock !== undefined) cleanedProductData.inStock = productData.inStock;
+    if (productData.quantity !== undefined) cleanedProductData.quantity = productData.quantity;
+    if (productData.image !== undefined) cleanedProductData.image = imageUrl;
+    if (productData.description !== undefined) cleanedProductData.description = productData.description;
+    
     // Add the product to Firestore with server timestamp
     const docRef = await addDoc(productsCollection, {
-      ...productData,
-      image: imageUrl,
+      ...cleanedProductData,
       createdAt: serverTimestamp()
     });
     
-    return { id: docRef.id, ...productData, image: imageUrl };
+    return { id: docRef.id, ...cleanedProductData };
   } catch (error) {
     console.error('Error adding product:', error);
     throw error;
@@ -133,8 +146,24 @@ export const getProductById = async (productId: string): Promise<Product | null>
 export const updateProduct = async (id: string, productData: Partial<Product>) => {
   try {
     const productRef = doc(FIREBASE_DB, 'products', id);
-    await updateDoc(productRef, productData);
-    return { id, ...productData };
+    
+    // Clean the product data to remove undefined values
+    const cleanedProductData: any = {};
+    
+    // Only include defined values
+    if (productData.name !== undefined) cleanedProductData.name = productData.name;
+    if (productData.type !== undefined) cleanedProductData.type = productData.type;
+    if (productData.weight !== undefined) cleanedProductData.weight = productData.weight;
+    if (productData.price !== undefined) cleanedProductData.price = productData.price;
+    if (productData.originalPrice !== undefined) cleanedProductData.originalPrice = productData.originalPrice;
+    if (productData.inStock !== undefined) cleanedProductData.inStock = productData.inStock;
+    if (productData.quantity !== undefined) cleanedProductData.quantity = productData.quantity;
+    if (productData.image !== undefined) cleanedProductData.image = productData.image;
+    if (productData.description !== undefined) cleanedProductData.description = productData.description;
+    if (productData.createdAt !== undefined) cleanedProductData.createdAt = productData.createdAt;
+    
+    await updateDoc(productRef, cleanedProductData);
+    return { id, ...cleanedProductData };
   } catch (error) {
     console.error('Error updating product:', error);
     throw error;
