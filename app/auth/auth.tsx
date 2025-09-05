@@ -1,17 +1,16 @@
 import { router } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { Eye, EyeOff, Mail, Phone, User, X } from 'lucide-react-native';
+import { Eye, EyeOff, Mail, Phone, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../core/auth/AuthContext';
@@ -24,6 +23,7 @@ import { subAdminAuthService } from '../../core/services/subAdminAuthService';
 import { userService } from '../../core/services/userService';
 import { WhatsAppOtpService } from '../../core/services/whatsappOtpService';
 import { SessionManager, UserSession } from '../../core/session/sessionManager';
+import ContactSupportSheet from '../../components/ui/ContactSupportSheet';
 
 interface FormData {
   name: string;
@@ -106,7 +106,7 @@ const LoginForm = ({
         <View style={styles.passwordInputContainer}>
           <TextInput
             style={styles.passwordInput}
-            placeholder="Password (6+ chars, 1 capital, 1 small)"
+            placeholder="Password"
             value={formData.password}
             onChangeText={(text) => updateFormData('password', text)}
             secureTextEntry={!showPassword}
@@ -188,7 +188,7 @@ const RegisterForm = ({
         <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
         <TextInput
           style={styles.input}
-          placeholder="Email Address (Optional) - Valid format required"
+          placeholder="Email Address (Optional)"
           value={formData.email}
           onChangeText={(text) => updateFormData('email', text)}
           autoCapitalize="none"
@@ -242,201 +242,205 @@ const RegisterForm = ({
   </>
 );
 
-// ForgotPasswordModal component moved outside to prevent re-rendering
-const ForgotPasswordModal = ({ 
-  visible, 
-  onClose, 
-  step, 
-  phone, 
-  onPhoneChange, 
-  otp, 
-  onOtpChange, 
-  newPassword, 
-  onNewPasswordChange, 
-  confirmPassword, 
-  onConfirmPasswordChange,
-  showPassword,
-  onShowPasswordChange,
-  showConfirmPassword,
-  onShowConfirmPasswordChange,
-  isLoading,
-  countdown,
-  onPhoneSubmit,
-  onOtpSubmit,
-  onPasswordReset,
-  onResendOtp
-}: {
-  visible: boolean;
-  onClose: () => void;
-  step: 'phone' | 'otp' | 'password';
-  phone: string;
-  onPhoneChange: (text: string) => void;
-  otp: string;
-  onOtpChange: (text: string) => void;
-  newPassword: string;
-  onNewPasswordChange: (text: string) => void;
-  confirmPassword: string;
-  onConfirmPasswordChange: (text: string) => void;
-  showPassword: boolean;
-  onShowPasswordChange: (show: boolean) => void;
-  showConfirmPassword: boolean;
-  onShowConfirmPasswordChange: (show: boolean) => void;
-  isLoading: boolean;
-  countdown: number;
-  onPhoneSubmit: () => void;
-  onOtpSubmit: () => void;
-  onPasswordReset: () => void;
-  onResendOtp: () => void;
-}) => (
-  <Modal
-    animationType="slide"
-    transparent={true}
-    visible={visible}
-    onRequestClose={onClose}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Forgot Password</Text>
-          <TouchableOpacity onPress={onClose}>
-            <X size={24} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
+// // ForgotPasswordModal component moved outside to prevent re-rendering
+// const ForgotPasswordModal = ({ 
+//   visible, 
+//   onClose, 
+//   step, 
+//   phone, 
+//   onPhoneChange, 
+//   otp, 
+//   onOtpChange, 
+//   newPassword, 
+//   onNewPasswordChange, 
+//   confirmPassword, 
+//   onConfirmPasswordChange,
+//   showPassword,
+//   onShowPasswordChange,
+//   showConfirmPassword,
+//   onShowConfirmPasswordChange,
+//   isLoading,
+//   countdown,
+//   onPhoneSubmit,
+//   onOtpSubmit,
+//   onPasswordReset,
+//   onResendOtp
+// }: {
+//   visible: boolean;
+//   onClose: () => void;
+//   step: 'phone' | 'otp' | 'password';
+//   phone: string;
+//   onPhoneChange: (text: string) => void;
+//   otp: string;
+//   onOtpChange: (text: string) => void;
+//   newPassword: string;
+//   onNewPasswordChange: (text: string) => void;
+//   confirmPassword: string;
+//   onConfirmPasswordChange: (text: string) => void;
+//   showPassword: boolean;
+//   onShowPasswordChange: (show: boolean) => void;
+//   showConfirmPassword: boolean;
+//   onShowConfirmPasswordChange: (show: boolean) => void;
+//   isLoading: boolean;
+//   countdown: number;
+//   onPhoneSubmit: () => void;
+//   onOtpSubmit: () => void;
+//   onPasswordReset: () => void;
+//   onResendOtp: () => void;
+// }) => (
+//   <Modal
+//     animationType="slide"
+//     transparent={true}
+//     visible={visible}
+//     statusBarTranslucent={true}
+//     onRequestClose={onClose}
+//   >
+//     <View style={styles.modalOverlay}>
+//       <View style={styles.modalContainer}>
+//         <View style={styles.modalHeader}>
+//           <Text style={styles.modalTitle}>Forgot Password</Text>
+//           <TouchableOpacity onPress={onClose}>
+//             <X size={24} color={Colors.textSecondary} />
+//           </TouchableOpacity>
+//         </View>
         
-        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-          {step === 'phone' && (
-            <View>
-              <Text style={styles.modalDescription}>
-                Enter your registered phone number to receive a password reset OTP via WhatsApp.
-              </Text>
-              <View style={styles.inputWrapper}>
-                <Phone size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter your phone number"
-                  value={phone}
-                  onChangeText={onPhoneChange}
-                  keyboardType="phone-pad"
-                  placeholderTextColor={Colors.textSecondary}
-                  editable={!isLoading}
-                />
-              </View>
-              <TouchableOpacity
-                style={[styles.submitButton, isLoading && styles.disabledButton]}
-                onPress={onPhoneSubmit}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={Colors.white} />
-                ) : (
-                  <Text style={styles.submitButtonText}>Send OTP</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
+//         <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+//           {step === 'phone' && (
+//             <View>
+//               <Text style={styles.modalDescription}>
+//                 Enter your registered phone number to receive a password reset OTP via WhatsApp.
+//               </Text>
+//               <View style={styles.inputWrapper}>
+//                 <Phone size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+//                 <TextInput
+//                   style={styles.input}
+//                   placeholder="Enter your phone number"
+//                   value={phone}
+//                   onChangeText={onPhoneChange}
+//                   keyboardType="phone-pad"
+//                   placeholderTextColor={Colors.textSecondary}
+//                   editable={!isLoading}
+//                 />
+//               </View>
+//               <TouchableOpacity
+//                 style={[styles.submitButton, isLoading && styles.disabledButton]}
+//                 onPress={onPhoneSubmit}
+//                 disabled={isLoading}
+//               >
+//                 {isLoading ? (
+//                   <ActivityIndicator size="small" color={Colors.white} />
+//                 ) : (
+//                   <Text style={styles.submitButtonText}>Send OTP</Text>
+//                 )}
+//               </TouchableOpacity>
+//             </View>
+//           )}
 
-          {step === 'otp' && (
-            <View>
-              <Text style={styles.modalDescription}>
-                Enter the 6-digit OTP sent to your WhatsApp.
-              </Text>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter 6-digit OTP"
-                  value={otp}
-                  onChangeText={onOtpChange}
-                  keyboardType="numeric"
-                  maxLength={6}
-                  placeholderTextColor={Colors.textSecondary}
-                  editable={!isLoading}
-                />
-              </View>
-              <TouchableOpacity
-                style={[styles.submitButton, isLoading && styles.disabledButton]}
-                onPress={onOtpSubmit}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={Colors.white} />
-                ) : (
-                  <Text style={styles.submitButtonText}>Verify OTP</Text>
-                )}
-              </TouchableOpacity>
+//           {step === 'otp' && (
+//             <View>
+//               <Text style={styles.modalDescription}>
+//                 Enter the 6-digit OTP sent to your WhatsApp.
+//               </Text>
+//               <View style={styles.inputWrapper}>
+//                 <TextInput
+//                   style={styles.input}
+//                   placeholder="Enter 6-digit OTP"
+//                   value={otp}
+//                   onChangeText={onOtpChange}
+//                   keyboardType="numeric"
+//                   maxLength={6}
+//                   placeholderTextColor={Colors.textSecondary}
+//                   editable={!isLoading}
+//                 />
+//               </View>
+//               <TouchableOpacity
+//                 style={[styles.submitButton, isLoading && styles.disabledButton]}
+//                 onPress={onOtpSubmit}
+//                 disabled={isLoading}
+//               >
+//                 {isLoading ? (
+//                   <ActivityIndicator size="small" color={Colors.white} />
+//                 ) : (
+//                   <Text style={styles.submitButtonText}>Verify OTP</Text>
+//                 )}
+//               </TouchableOpacity>
               
-              <TouchableOpacity
-                style={[styles.resendButton, countdown > 0 && { opacity: 0.5 }]}
-                onPress={onResendOtp}
-                disabled={countdown > 0 || isLoading}
-              >
-                <Text style={styles.resendButtonText}>
-                  {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+//               <TouchableOpacity
+//                 style={[styles.resendButton, countdown > 0 && { opacity: 0.5 }]}
+//                 onPress={onResendOtp}
+//                 disabled={countdown > 0 || isLoading}
+//               >
+//                 <Text style={styles.resendButtonText}>
+//                   {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
+//                 </Text>
+//               </TouchableOpacity>
+//               <Text style={styles.supportText}>
+//                 If you didn't get the OTP, contact Vihar Electricals HP - 02662222788
+//               </Text>
+//             </View>
+//           )}
 
-          {step === 'password' && (
-            <View>
-              <Text style={styles.modalDescription}>
-                Enter your new password.
-              </Text>
-              <View style={styles.inputWrapper}>
-                <View style={styles.passwordInputContainer}>
-                  <TextInput
-                    style={styles.passwordInput}
-                    placeholder="Enter new password"
-                    value={newPassword}
-                    onChangeText={onNewPasswordChange}
-                    secureTextEntry={!showPassword}
-                    placeholderTextColor={Colors.textSecondary}
-                    editable={!isLoading}
-                  />
-                  <TouchableOpacity
-                    style={styles.eyeButton}
-                    onPress={() => onShowPasswordChange(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <View style={styles.inputWrapper}>
-                <View style={styles.passwordInputContainer}>
-                  <TextInput
-                    style={styles.passwordInput}
-                    placeholder="Confirm new password"
-                    value={confirmPassword}
-                    onChangeText={onConfirmPasswordChange}
-                    secureTextEntry={!showConfirmPassword}
-                    placeholderTextColor={Colors.textSecondary}
-                    editable={!isLoading}
-                  />
-                  <TouchableOpacity
-                    style={styles.eyeButton}
-                    onPress={() => onShowConfirmPasswordChange(!showConfirmPassword)}
-                  >
-                    {showConfirmPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={[styles.submitButton, isLoading && styles.disabledButton]}
-                onPress={onPasswordReset}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={Colors.white} />
-                ) : (
-                  <Text style={styles.submitButtonText}>Reset Password</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
-      </View>
-    </View>
-  </Modal>
-);
+//           {step === 'password' && (
+//             <View>
+//               <Text style={styles.modalDescription}>
+//                 Enter your new password.
+//               </Text>
+//               <View style={styles.inputWrapper}>
+//                 <View style={styles.passwordInputContainer}>
+//                   <TextInput
+//                     style={styles.passwordInput}
+//                     placeholder="Enter new password"
+//                     value={newPassword}
+//                     onChangeText={onNewPasswordChange}
+//                     secureTextEntry={!showPassword}
+//                     placeholderTextColor={Colors.textSecondary}
+//                     editable={!isLoading}
+//                   />
+//                   <TouchableOpacity
+//                     style={styles.eyeButton}
+//                     onPress={() => onShowPasswordChange(!showPassword)}
+//                   >
+//                     {showPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+//                   </TouchableOpacity>
+//                 </View>
+//               </View>
+//               <View style={styles.inputWrapper}>
+//                 <View style={styles.passwordInputContainer}>
+//                   <TextInput
+//                     style={styles.passwordInput}
+//                     placeholder="Confirm new password"
+//                     value={confirmPassword}
+//                     onChangeText={onConfirmPasswordChange}
+//                     secureTextEntry={!showConfirmPassword}
+//                     placeholderTextColor={Colors.textSecondary}
+//                     editable={!isLoading}
+//                   />
+//                   <TouchableOpacity
+//                     style={styles.eyeButton}
+//                     onPress={() => onShowConfirmPasswordChange(!showConfirmPassword)}
+//                   >
+//                     {showConfirmPassword ? <EyeOff size={20} color={Colors.textSecondary} /> : <Eye size={20} color={Colors.textSecondary} />}
+//                   </TouchableOpacity>
+//                 </View>
+//               </View>
+//               <TouchableOpacity
+//                 style={[styles.submitButton, isLoading && styles.disabledButton]}
+//                 onPress={onPasswordReset}
+//                 disabled={isLoading}
+//               >
+//                 {isLoading ? (
+//                   <ActivityIndicator size="small" color={Colors.white} />
+//                 ) : (
+//                   <Text style={styles.submitButtonText}>Reset Password</Text>
+//                 )}
+//               </TouchableOpacity>
+//             </View>
+//           )}
+//         </ScrollView>
+//       </View>
+//     </View>
+//   </Modal>
+// );
 
 export default function AuthScreen() {
   const { login } = useAuth();
@@ -884,6 +888,11 @@ export default function AuthScreen() {
     return () => clearTimeout(timer);
   }, [forgotPasswordCountdown]);
 
+  // Simple bottom-sheet popup for Forgot Password
+  const openForgotPasswordInfo = (_value?: boolean) => {
+    setForgotPasswordModalVisible(true);
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <View style={styles.header}>
@@ -921,7 +930,7 @@ export default function AuthScreen() {
             setShowPassword={setShowPassword}
             isLoading={isLoading}
             handleSubmit={handleSubmit}
-            setForgotPasswordModalVisible={setForgotPasswordModalVisible}
+            setForgotPasswordModalVisible={openForgotPasswordInfo}
           />
         ) : (
           <RegisterForm 
@@ -940,34 +949,22 @@ export default function AuthScreen() {
           Secure and reliable gas delivery service
         </Text>
       </View>
-      <ForgotPasswordModal 
+      <ContactSupportSheet
         visible={forgotPasswordModalVisible}
-        onClose={resetForgotPasswordModal}
-        step={forgotPasswordStep}
-        phone={forgotPasswordPhone}
-        onPhoneChange={setForgotPasswordPhone}
-        otp={forgotPasswordOtp}
-        onOtpChange={setForgotPasswordOtp}
-        newPassword={forgotPasswordNewPassword}
-        onNewPasswordChange={setForgotPasswordNewPassword}
-        confirmPassword={forgotPasswordConfirmPassword}
-        onConfirmPasswordChange={setForgotPasswordConfirmPassword}
-        showPassword={forgotPasswordShowPassword}
-        onShowPasswordChange={setForgotPasswordShowPassword}
-        showConfirmPassword={forgotPasswordShowConfirmPassword}
-        onShowConfirmPasswordChange={setForgotPasswordShowConfirmPassword}
-        isLoading={forgotPasswordIsLoading}
-        countdown={forgotPasswordCountdown}
-        onPhoneSubmit={handleForgotPasswordPhoneSubmit}
-        onOtpSubmit={handleForgotPasswordOtpSubmit}
-        onPasswordReset={handleForgotPasswordReset}
-        onResendOtp={handleForgotPasswordResendOTP}
+        title="Help & Support"
+        items={[
+          { type: 'phone', title: 'Office Line 1', value: '02662-222724' },
+          { type: 'phone', title: 'Office Line 2', value: '02662-222788' },
+          { type: 'email', title: 'Email Us', value: 'viharelectrichp@gmail.com' },
+        ]}
+        onClose={() => setForgotPasswordModalVisible(false)}
       />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  // ... (rest of the code remains the same)
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -1192,6 +1189,12 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: 14,
     fontWeight: '600',
+  },
+  supportText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
   iconToggleContainer: {
     alignItems: 'center',
