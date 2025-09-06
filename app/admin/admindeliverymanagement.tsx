@@ -403,12 +403,16 @@ export default function AdminDeliveryAgentScreen({ navigation }: { navigation: a
                  <View style={styles.inputGroup}>
                      <Text style={styles.inputLabel}>Email <Text style={styles.optionalText}>(Optional if phone provided)</Text></Text>
                      <TextInput 
-                         style={styles.input} 
-                         value={formData.email} 
-                         onChangeText={(text) => setFormData({ ...formData, email: text })} 
-                         placeholder="Enter email address" 
-                         keyboardType="email-address" 
-                         autoCapitalize="none" 
+                        style={[
+                          styles.input,
+                          (agentToEdit && agentToEdit.email) && styles.inputDisabled,
+                        ]} 
+                        value={formData.email} 
+                        onChangeText={(text) => setFormData({ ...formData, email: text })} 
+                        placeholder="Enter email address" 
+                        keyboardType="email-address" 
+                        autoCapitalize="none" 
+                        editable={!(agentToEdit && agentToEdit.email)}
                      />
                      <Text style={styles.helpText}>Format: user@example.com</Text>
                  </View>
@@ -727,6 +731,10 @@ const styles = StyleSheet.create({
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  inputDisabled: {
+    backgroundColor: Colors.border,
+    color: Colors.textSecondary,
   },
   modalActions: {
     padding: 20,

@@ -711,18 +711,31 @@ export default function AuthScreen() {
           }
         }
       } else {
-        // Registration - always use phone since it's mandatory
-        const created = await customerAuthService.registerWithPhone(formData.name, formData.phone, formData.password);
-        // Build session for new phone-based user
-        const phoneSession: UserSession = {
+        // Registration - phone is mandatory, email optional
+        const name = formData.name.trim();
+        const phone = formData.phone.trim();
+        const email = formData.email.trim();
+        const password = formData.password;
+
+        let created: any;
+        if (email) {
+          // If email is provided and valid, persist it in Firestore during registration
+          created = await customerAuthService.registerWithEmail(name, email, phone, password);
+        } else {
+          created = await customerAuthService.registerWithPhone(name, phone, password);
+        }
+
+        // Build session for new user
+        const newSession: UserSession = {
           uid: created.uid,
-          phoneNumber: formData.phone,
-          displayName: formData.name,
+          phoneNumber: phone,
+          email: email || undefined,
+          displayName: name,
           role: 'customer',
           sessionToken: SessionManager.generateSessionToken(),
           loginTime: Date.now(),
         };
-        await login(phoneSession);
+        await login(newSession);
         toast.showRegistrationSuccess();
         setTimeout(() => {
           router.replace('/customer/home');
