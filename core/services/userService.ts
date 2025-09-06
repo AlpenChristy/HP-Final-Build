@@ -1,5 +1,5 @@
 // File: core/services/userService.ts
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { FIREBASE_DB } from '../firebase/firebase';
 
 // User data interface
@@ -125,6 +125,17 @@ export const userService = {
     } catch (error) {
       console.error('Error getting all users:', error);
       return [];
+    }
+  },
+
+  // Delete user by uid
+  async deleteUser(uid: string): Promise<void> {
+    try {
+      const userRef = doc(FIREBASE_DB, 'users', uid);
+      await deleteDoc(userRef);
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
     }
   }
 };

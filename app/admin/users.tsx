@@ -167,8 +167,9 @@ export default function CustomerUsersScreen() {
 
     try {
       setIsDeleting(true);
-      // Here you would implement the actual deletion logic
-      // For now, we'll just remove from the local state
+      // Delete from Firestore
+      await userService.deleteUser(customerToDelete.uid);
+      // Then remove from local state
       setCustomers(prev => prev.filter(customer => customer.uid !== customerToDelete.uid));
       setSelectedCustomer(null);
       setModalVisible(false);

@@ -23,7 +23,7 @@ import { subAdminAuthService } from '../../core/services/subAdminAuthService';
 import { userService } from '../../core/services/userService';
 import { WhatsAppOtpService } from '../../core/services/whatsappOtpService';
 import { SessionManager, UserSession } from '../../core/session/sessionManager';
-import ContactSupportSheet from '../../components/ui/ContactSupportSheet';
+import ForgotPasswordInfoBox from '../../components/ui/ForgotPasswordInfoBox';
 
 interface FormData {
   name: string;
@@ -888,10 +888,8 @@ export default function AuthScreen() {
     return () => clearTimeout(timer);
   }, [forgotPasswordCountdown]);
 
-  // Simple bottom-sheet popup for Forgot Password
-  const openForgotPasswordInfo = (_value?: boolean) => {
-    setForgotPasswordModalVisible(true);
-  };
+  // Simple info popup for Forgot Password
+  const [forgotInfoVisible, setForgotInfoVisible] = useState(false);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
@@ -930,7 +928,7 @@ export default function AuthScreen() {
             setShowPassword={setShowPassword}
             isLoading={isLoading}
             handleSubmit={handleSubmit}
-            setForgotPasswordModalVisible={openForgotPasswordInfo}
+            setForgotPasswordModalVisible={setForgotInfoVisible}
           />
         ) : (
           <RegisterForm 
@@ -949,15 +947,11 @@ export default function AuthScreen() {
           Secure and reliable gas delivery service
         </Text>
       </View>
-      <ContactSupportSheet
-        visible={forgotPasswordModalVisible}
-        title="Help & Support"
-        items={[
-          { type: 'phone', title: 'Office Line 1', value: '02662-222724' },
-          { type: 'phone', title: 'Office Line 2', value: '02662-222788' },
-          { type: 'email', title: 'Email Us', value: 'viharelectrichp@gmail.com' },
-        ]}
-        onClose={() => setForgotPasswordModalVisible(false)}
+      {/* Styled info popup using blue theme with highlighted phone number */}
+      <ForgotPasswordInfoBox
+        visible={forgotInfoVisible}
+        onClose={() => setForgotInfoVisible(false)}
+        title="Forgot Password"
       />
     </ScrollView>
   );

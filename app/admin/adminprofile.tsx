@@ -13,6 +13,7 @@ import { PromocodeData, promocodeService } from '../../core/services/promocodeSe
 import { SubAdminData, SubAdminPermissions, subAdminService } from '../../core/services/subAdminService';
 import { userService } from '../../core/services/userService';
 import { createToastHelpers } from '../../core/utils/toastUtils';
+import { customerAuthService } from '../../core/services/customerAuthService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -52,25 +53,108 @@ const EditProfileContent = ({ user, onSave, isSaving }: { user: any, onSave: (da
     );
 };
 
-const ChangePasswordContent = () => (
-    <View>
-        <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Current Password</Text>
-            <TextInput style={styles.input} secureTextEntry />
+const ChangePasswordContent = () => {
+    const { userSession } = useAuth();
+    const toast = createToastHelpers();
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleChangePassword = async () => {
+        // Validations similar to customer side
+        if (!currentPassword.trim()) {
+            toast.showError('Validation Error', 'Please enter your current password.');
+            return;
+        }
+
+        if (!newPassword.trim() || newPassword.length < 6) {
+            toast.showError('Validation Error', 'New password must be at least 6 characters long.');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            toast.showError('Validation Error', 'New passwords do not match.');
+            return;
+        }
+
+        if (currentPassword === newPassword) {
+            toast.showError('Validation Error', 'New password must be different from current password.');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            if (!userSession?.uid) {
+                throw new Error('User session not available');
+            }
+
+            // Verify current password from Firestore
+            const userData = await userService.getUserById(userSession.uid);
+            if (!userData) {
+                throw new Error('User data not found');
+            }
+            if (userData.password !== currentPassword) {
+                toast.showError('Error', 'Current password is incorrect.');
+                return;
+            }
+
+            // Update password via shared service
+            await customerAuthService.updateCustomerPassword(userSession.uid, newPassword);
+
+            toast.showSuccess('Success', 'Password updated successfully!');
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch (error: any) {
+            console.error('Error changing admin password:', error);
+            toast.showError('Error', error.message || 'Failed to update password. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <View>
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Current Password</Text>
+                <TextInput 
+                    style={styles.input} 
+                    secureTextEntry 
+                    value={currentPassword}
+                    onChangeText={setCurrentPassword}
+                    editable={!isLoading}
+                    placeholder="Enter current password"
+                />
+            </View>
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>New Password</Text>
+                <TextInput 
+                    style={styles.input} 
+                    secureTextEntry 
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    editable={!isLoading}
+                    placeholder="Enter new password"
+                />
+            </View>
+            <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Confirm New Password</Text>
+                <TextInput 
+                    style={styles.input} 
+                    secureTextEntry 
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    editable={!isLoading}
+                    placeholder="Confirm new password"
+                />
+            </View>
+            <TouchableOpacity style={[styles.saveButton, isLoading && styles.saveButtonDisabled]} onPress={handleChangePassword} disabled={isLoading}>
+                <Text style={styles.saveButtonText}>{isLoading ? 'Updating Password...' : 'Update Password'}</Text>
+            </TouchableOpacity>
         </View>
-        <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>New Password</Text>
-            <TextInput style={styles.input} secureTextEntry />
-        </View>
-        <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Confirm New Password</Text>
-            <TextInput style={styles.input} secureTextEntry />
-        </View>
-        <TouchableOpacity style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Update Password</Text>
-        </TouchableOpacity>
-    </View>
-);
+    );
+};
 
 
 

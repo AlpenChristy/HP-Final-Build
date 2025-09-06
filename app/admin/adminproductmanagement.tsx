@@ -130,7 +130,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
     try {
       setUploadingImage(true);
       
-      const imageAsset = await pickImage({ allowsEditing: true, aspect: [4, 3] });
+      const imageAsset = await pickImage({ allowsEditing: false, quality: 0.9 });
       
       if (imageAsset) {
         const imageUrl = await uploadToCloudinary(imageAsset.uri);
@@ -169,29 +169,46 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
     try {
       setSaving(true);
       
-      const productData: Omit<Product, 'id' | 'createdAt'> = {
+      const isEditing = !!editingProduct;
+      const parsedOriginalPrice = formData.originalPrice.trim() === ''
+        ? (isEditing ? null : undefined)
+        : parseFloat(formData.originalPrice);
+
+      const baseData = {
         name: formData.name.trim(),
         type: formData.type,
         price: parseFloat(formData.price),
-        originalPrice: parseFloat(formData.originalPrice) || undefined,
         description: formData.description.trim(),
         image: selectedImage!,
         inStock: formData.inStock,
         quantity: formData.inStock && formData.quantity ? parseFloat(formData.quantity) : undefined,
-      };
+      } as const;
 
       if (editingProduct) {
+        // Build update payload allowing null to delete field
+        const updatePayload: any = {
+          ...baseData,
+        };
+        if (parsedOriginalPrice === null) {
+          updatePayload.originalPrice = null;
+        } else if (parsedOriginalPrice !== undefined) {
+          updatePayload.originalPrice = parsedOriginalPrice;
+        }
         // Update existing product
-        const updatedProduct = await updateProduct(editingProduct.id!, productData);
+        const updatedProduct = await updateProduct(editingProduct.id!, updatePayload);
         showToast('success', 'Success', 'Product updated successfully');
         
         // Update the product in the local state instead of reloading all
         setProducts(prevProducts => 
-          prevProducts.map(p => p.id === editingProduct.id ? { ...p, ...productData } : p)
+          prevProducts.map(p => p.id === editingProduct.id ? { ...p, ...updatePayload } : p)
         );
       } else {
         // Add new product
-        const newProduct = await addProduct(productData);
+        const addPayload: Omit<Product, 'id' | 'createdAt'> = {
+          ...baseData,
+          ...(parsedOriginalPrice !== undefined ? { originalPrice: parsedOriginalPrice as number } : {}),
+        };
+        const newProduct = await addProduct(addPayload);
         showToast('success', 'Success', 'Product added successfully');
         
         // Add the new product to the local state instead of reloading all
@@ -294,7 +311,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
         ) : (
           filteredProducts.map((product) => (
             <View key={product.id} style={styles.productCard}>
-              <Image source={{ uri: product.image }} style={styles.productImage} />
+              <Image source={{ uri: product.image }} style={styles.productImage} resizeMode="contain" />
               <View style={styles.productContent}>
                   <View style={styles.productInfo}>
                       <Text style={styles.productName}>{product.name}</Text>
@@ -365,7 +382,7 @@ export default function AdminProductsScreen({ navigation }: { navigation: any })
                       </View>
                     ) : selectedImage ? (
                       <View style={styles.imagePreviewContainer}>
-                        <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
+                        <Image source={{ uri: selectedImage }} style={styles.imagePreview} resizeMode="contain" />
                         <View style={styles.imageOverlay}>
                           <Camera size={20} color={Colors.white} />
                           <Text style={styles.changeImageText}>Change Image</Text>

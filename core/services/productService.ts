@@ -1,6 +1,6 @@
 // core/services/productService.ts
 
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, deleteField } from 'firebase/firestore';
 import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 import { FIREBASE_DB } from '../firebase/firebase';
 
@@ -143,7 +143,7 @@ export const getProductById = async (productId: string): Promise<Product | null>
 };
 
 // Update a product
-export const updateProduct = async (id: string, productData: Partial<Product>) => {
+export const updateProduct = async (id: string, productData: Partial<Product> & { originalPrice?: number | null }) => {
   try {
     const productRef = doc(FIREBASE_DB, 'products', id);
     
@@ -155,7 +155,12 @@ export const updateProduct = async (id: string, productData: Partial<Product>) =
     if (productData.type !== undefined) cleanedProductData.type = productData.type;
     if (productData.weight !== undefined) cleanedProductData.weight = productData.weight;
     if (productData.price !== undefined) cleanedProductData.price = productData.price;
-    if (productData.originalPrice !== undefined) cleanedProductData.originalPrice = productData.originalPrice;
+    // For originalPrice, allow explicit null to delete the field in Firestore
+    if (productData.originalPrice === null) {
+      cleanedProductData.originalPrice = deleteField();
+    } else if (productData.originalPrice !== undefined) {
+      cleanedProductData.originalPrice = productData.originalPrice;
+    }
     if (productData.inStock !== undefined) cleanedProductData.inStock = productData.inStock;
     if (productData.quantity !== undefined) cleanedProductData.quantity = productData.quantity;
     if (productData.image !== undefined) cleanedProductData.image = productData.image;
