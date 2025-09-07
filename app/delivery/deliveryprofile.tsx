@@ -1,14 +1,12 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { updateEmail } from 'firebase/auth';
 import { ArrowLeft, ChevronRight, LogOut, User, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LogoutConfirmationBox from '../../components/ui/LogoutConfirmationBox';
 import { useAuth } from '../../core/auth/AuthContext';
-import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 import { userService } from '../../core/services/userService';
 import { createToastHelpers } from '../../core/utils/toastUtils';
 
@@ -134,16 +132,6 @@ export default function DeliveryAgentProfileScreen() {
     try {
       // Update Firestore user data
       await userService.updateUser(userSession.uid, { displayName: name, email, phoneNumber: phone });
-
-      // Try updating Firebase Auth email (may require recent login)
-      const currentUser = FIREBASE_AUTH.currentUser;
-      if (currentUser && currentUser.email !== email) {
-        try {
-          await updateEmail(currentUser, email);
-        } catch (err) {
-          console.warn('Failed to update Firebase Auth email:', err);
-        }
-      }
 
       // Refresh local session (include phone)
       const updatedSession = { ...userSession, displayName: name, email, phoneNumber: phone };

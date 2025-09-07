@@ -8,12 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LogoutConfirmationBox from '../../components/ui/LogoutConfirmationBox';
 import { useAdminNavigation } from '../../core/auth/AdminNavigationContext';
 import { useAuth } from '../../core/auth/AuthContext';
+import { customerAuthService } from '../../core/services/customerAuthService';
 import { NotificationData, notificationService } from '../../core/services/notificationService';
 import { PromocodeData, promocodeService } from '../../core/services/promocodeService';
 import { SubAdminData, SubAdminPermissions, subAdminService } from '../../core/services/subAdminService';
 import { userService } from '../../core/services/userService';
 import { createToastHelpers } from '../../core/utils/toastUtils';
-import { customerAuthService } from '../../core/services/customerAuthService';
 
 // --- Color Palette (Matched with other pages) ---
 const Colors = {
@@ -348,6 +348,7 @@ const PromocodeContent = ({ setModalView, setEditingPromocode, promocodes, onDel
 };
 
 const AddPromocodeContent = ({ editingPromocode, onSave }: { editingPromocode: PromocodeData | null, onSave: (data: any) => void }) => {
+    const toast = createToastHelpers();
     const [formData, setFormData] = useState({
         code: '',
         discountType: 'percentage' as 'percentage' | 'fixed',
@@ -685,6 +686,7 @@ const NotificationContent = ({ setModalView, setEditingNotification, notificatio
 };
 
 const AddNotificationContent = ({ editingNotification, onSave }: { editingNotification: NotificationData | null, onSave: (data: any) => void }) => {
+    const toast = createToastHelpers();
     const [formData, setFormData] = useState({
         title: '',
         message: '',
@@ -835,6 +837,7 @@ const AddNotificationContent = ({ editingNotification, onSave }: { editingNotifi
 };
 
 const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminData | null, onSave: (data: any) => void }) => {
+    const toast = createToastHelpers();
     const [formData, setFormData] = useState({
         name: editingAdmin?.displayName || '',
         phone: editingAdmin?.phoneNumber || '',
@@ -932,9 +935,21 @@ const AddSubAdminContent = ({ editingAdmin, onSave }: { editingAdmin: SubAdminDa
                 isEdit: !!editingAdmin,
                 uid: editingAdmin?.uid,
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving sub-admin:', error);
-            toast.showError('Save Error', 'An error occurred while saving.');
+            
+            // Handle specific validation errors
+            if (error.message?.includes('Email address is already registered')) {
+                toast.showError('Error', 'This email address is already registered.');
+            } else if (error.message?.includes('Phone number is already registered')) {
+                toast.showError('Error', 'This phone number is already registered.');
+            } else if (error.message?.includes('Email address is already registered by another user')) {
+                toast.showError('Error', 'This email address is already registered by another user.');
+            } else if (error.message?.includes('Phone number is already registered by another user')) {
+                toast.showError('Error', 'This phone number is already registered by another user.');
+            } else {
+                toast.showError('Error', error.message || 'Failed to save sub-admin. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -1122,7 +1137,8 @@ export default function AdminProfileScreen({ navigation }: { navigation: any }) 
   };
 
   const handleSaveSubAdmin = async (data: any) => {
-    if (!userSession?.uid || !userSession?.email) {
+    if (!userSession?.uid) {
+      toast.showError('Error', 'You are not authenticated as admin. Please log in again.');
       return;
     }
 
@@ -1890,7 +1906,7 @@ const styles = StyleSheet.create({
       marginBottom: 12,
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
+      alignItems: 'flex-start',
   },
   subAdminName: {
       fontSize: 16,
@@ -2145,4 +2161,3 @@ const styles = StyleSheet.create({
   },
 
 });
-

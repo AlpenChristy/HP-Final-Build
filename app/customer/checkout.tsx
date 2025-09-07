@@ -302,24 +302,24 @@ export default function CheckoutScreen() {
                 </View>
             </View>
         </View>
-      </ScrollView>
 
-      {/* Checkout Footer */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 70 }]}>
-        <View>
-            <Text style={styles.footerTotalAmount}>₹{totalAmount.toFixed(2)}</Text>
-            <Text style={styles.footerTotalLabel}>TOTAL</Text>
+        {/* Place Order Section (inline, below content) */}
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
+          <View>
+              <Text style={styles.footerTotalAmount}>₹{totalAmount.toFixed(2)}</Text>
+              <Text style={styles.footerTotalLabel}>TOTAL</Text>
+          </View>
+          <TouchableOpacity 
+              style={[styles.checkoutButton, isPlacingOrder && { opacity: 0.6 }]} 
+              onPress={handlePlaceOrder}
+              disabled={isPlacingOrder}
+          >
+              <Text style={styles.checkoutButtonText}>
+                  {isPlacingOrder ? 'Placing Order...' : 'Place Order'}
+              </Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity 
-            style={[styles.checkoutButton, isPlacingOrder && { opacity: 0.6 }]} 
-            onPress={handlePlaceOrder}
-            disabled={isPlacingOrder}
-        >
-            <Text style={styles.checkoutButtonText}>
-                {isPlacingOrder ? 'Placing Order...' : 'Place Order'}
-            </Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       {/* Address Modal */}
       <Modal
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 120, // Space for the footer
+    paddingBottom: 20, // Inline footer, no extra space needed
   },
   section: {
     marginBottom: 24,
@@ -575,23 +575,21 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: Colors.surface,
     padding: 16,
     paddingTop: 16,
-    borderTopWidth: 1,
+    borderWidth: 1,
     borderColor: Colors.border,
+    borderRadius: 16,
+    overflow: 'hidden',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 6,
   },
   footerTotalAmount: {
     fontSize: 20,

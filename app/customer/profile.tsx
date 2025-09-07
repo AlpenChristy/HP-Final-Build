@@ -4,8 +4,8 @@ import { ArrowLeft, Bell, ChevronRight, Edit, Eye, EyeOff, HelpCircle, Lock, Log
 import { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import LogoutConfirmationBox from '../../components/ui/LogoutConfirmationBox';
 import ForgotPasswordInfoBox from '../../components/ui/ForgotPasswordInfoBox';
+import LogoutConfirmationBox from '../../components/ui/LogoutConfirmationBox';
 
 import { useAuth } from '../../core/auth/AuthContext';
 import { useAddress } from '../../core/context/AddressContext';
@@ -680,8 +680,9 @@ export default function ProfileScreen() {
       toast.showValidationError('name');
       return;
     }
+    // Validate email ONLY if provided (allow phone-only users to skip email)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (email && !emailRegex.test(email)) {
       toast.showValidationError('email address');
       return;
     }
@@ -689,10 +690,11 @@ export default function ProfileScreen() {
     setIsSavingPersonal(true);
     try {
       // 1) Update in Firestore
-      await userService.updateUser(userSession.uid, { 
-        displayName: name, 
-        email
-      });
+      const updatePayload: any = { displayName: name };
+      if (email) {
+        updatePayload.email = email;
+      }
+      await userService.updateUser(userSession.uid, updatePayload);
 
       // 2) Update consumer number using context (if changed)
       if (consumerNumber !== user?.consumerNumber) {
@@ -700,10 +702,10 @@ export default function ProfileScreen() {
       }
 
       // 3) Refresh local session
-      await login({ ...userSession, displayName: name, email });
+      await login({ ...userSession, displayName: name, email: email || userSession.email });
 
       // 4) Update local screen state
-      setUserData(prev => prev ? { ...prev, displayName: name, email } : prev);
+      setUserData(prev => prev ? { ...prev, displayName: name, email: email || prev.email } : prev);
 
       // 5) Refresh user data to ensure consistency
       refreshUserData();

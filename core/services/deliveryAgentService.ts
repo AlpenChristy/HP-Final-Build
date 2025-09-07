@@ -1,14 +1,10 @@
 // File: core/services/deliveryAgentService.ts
 
-import { initializeApp } from 'firebase/app';
-import { createUserWithEmailAndPassword, deleteUser, getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
-import { FIREBASE_DB, firebaseConfig } from '../firebase/firebase';
+import { FIREBASE_DB } from '../firebase/firebase';
 import { userService } from './userService';
 
-// --- Secondary Firebase app for creating accounts without logging out admin ---
-const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
-const secondaryAuth = getAuth(secondaryApp);
+// Firebase Auth removed: operations are Firestore-only.
 
 // Delivery Agent interface
 export interface DeliveryAgent {
@@ -28,7 +24,7 @@ export interface DeliveryAgent {
 }
 
 export const deliveryAgentService = {
-  // Create a new delivery agent in Firebase Auth + Firestore without logging out admin
+  // Create a new delivery agent in Firestore without logging out admin
   async createDeliveryAgent(agentData: {
     name: string;
     email?: string;
@@ -59,25 +55,12 @@ export const deliveryAgentService = {
         }
       }
 
-      // If email is provided, create Firebase Auth account
-      let user;
-      if (agentData.email) {
-        const { user: firebaseUser } = await createUserWithEmailAndPassword(
-          secondaryAuth,
-          agentData.email,
-          agentData.password
-        );
-        user = firebaseUser;
-      } else {
-        // If no email, we need to create a custom UID for phone-only agents
-        // This is a simplified approach - in production you might want a more robust solution
-        const customUid = `phone_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        user = { uid: customUid } as any;
-      }
+      // Generate a custom UID (no Firebase Auth)
+      const uid = `delivery_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
       // 2. Create base user document in unified users collection
       const userData: any = {
-        uid: user.uid,
+        uid,
         displayName: agentData.name,
         role: 'delivery',
       };
@@ -93,7 +76,7 @@ export const deliveryAgentService = {
       await userService.createUser(userData);
 
       // 3. Add delivery-specific fields on the same users doc
-      const userRef = doc(FIREBASE_DB, 'users', user.uid);
+      const userRef = doc(FIREBASE_DB, 'users', uid);
       await updateDoc(userRef, {
         // Warning: storing plaintext password is insecure; retained to match existing flow
         password: agentData.password,
@@ -105,17 +88,12 @@ export const deliveryAgentService = {
         updatedAt: timestamp,
       });
 
-      // 5. Sign out secondary auth to clean up (only if we created a Firebase Auth user)
-      if (agentData.email) {
-        await signOut(secondaryAuth);
-      }
-
       // 4. Build return object from users doc
       const createdSnap = await getDoc(userRef);
       const data = createdSnap.data() as any;
       const deliveryAgent: DeliveryAgent = {
-        id: user.uid,
-        uid: user.uid,
+        id: uid,
+        uid,
         name: data.displayName || agentData.name,
         email: data.email || agentData.email || '',
         phone: data.phoneNumber || agentData.phone || '',
@@ -232,31 +210,6 @@ export const deliveryAgentService = {
         passwordChangedAt: timestamp, // This will invalidate all existing sessions
         updatedAt: timestamp,
       });
-
-      // 2. Update Firebase Auth password using secondary auth
-      const userDoc = await getDoc(userRef);
-      if (userDoc.exists()) {
-        const userData = userDoc.data() as any;
-        const email = userData.email;
-        
-        if (email) {
-          try {
-            // Sign in with old password to get current user
-            await signInWithEmailAndPassword(secondaryAuth, email, userData.password);
-            
-            // Update password in Firebase Auth
-            if (secondaryAuth.currentUser) {
-              await secondaryAuth.currentUser.updatePassword(newPassword);
-            }
-          } catch (authError) {
-            console.warn('Warning: Failed to update Firebase Auth password:', authError);
-            // Continue anyway as the Firestore update is more important for session invalidation
-          } finally {
-            try { await signOut(secondaryAuth); } catch {}
-          }
-        }
-      }
-
     } catch (error) {
       console.error('Error changing delivery agent password:', error);
       throw new Error('Failed to change delivery agent password');
@@ -266,30 +219,8 @@ export const deliveryAgentService = {
   // Delete delivery agent (Firestore only — Auth deletion requires server/Admin SDK)
   async deleteDeliveryAgent(uid: string): Promise<void> {
     try {
-      const userRef = doc(FIREBASE_DB, 'users', uid);
-      const snap = await getDoc(userRef);
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        const email = data.email;
-        const password = data.password; // per existing flow
-
-        // Try to delete Auth user by signing in on secondary auth
-        if (email && password) {
-          try {
-            await signInWithEmailAndPassword(secondaryAuth, email, password);
-            if (secondaryAuth.currentUser) {
-              await deleteUser(secondaryAuth.currentUser);
-            }
-          } catch (authErr) {
-            console.warn('Warning: Failed to delete Firebase Auth user for delivery agent:', authErr);
-          } finally {
-            try { await signOut(secondaryAuth); } catch {}
-          }
-        }
-      }
-
       // Delete Firestore user document
-      await deleteDoc(userRef);
+      await deleteDoc(doc(FIREBASE_DB, 'users', uid));
     } catch (error) {
       console.error('Error deleting delivery agent:', error);
       throw new Error('Failed to delete delivery agent');

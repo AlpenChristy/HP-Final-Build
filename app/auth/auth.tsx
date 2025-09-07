@@ -1,29 +1,27 @@
 import { router } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
 import { Eye, EyeOff, Mail, Phone, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../core/auth/AuthContext';
-import { FIREBASE_AUTH } from '../../core/firebase/firebase';
 import { createToastHelpers } from '../../core/utils/toastUtils';
 
+import ForgotPasswordInfoBox from '../../components/ui/ForgotPasswordInfoBox';
 import { customerAuthService } from '../../core/services/customerAuthService';
 import { deliveryAuthService } from '../../core/services/deliveryAuthService';
 import { subAdminAuthService } from '../../core/services/subAdminAuthService';
 import { userService } from '../../core/services/userService';
 import { WhatsAppOtpService } from '../../core/services/whatsappOtpService';
 import { SessionManager, UserSession } from '../../core/session/sessionManager';
-import ForgotPasswordInfoBox from '../../components/ui/ForgotPasswordInfoBox';
 
 interface FormData {
   name: string;
@@ -542,9 +540,6 @@ export default function AuthScreen() {
     setIsLoading(true);
 
     try {
-      let userCredential;
-      let userData;
-
       if (isLogin) {
         if (usePhoneAuth) {
           // Try customer login via phone first
@@ -673,41 +668,8 @@ export default function AuthScreen() {
               // Silently continue to next auth method
             }
             
-            // If all custom auth methods fail, try Firebase Auth as fallback (for legacy users)
-            try {
-              userCredential = await signInWithEmailAndPassword(FIREBASE_AUTH, formData.email, formData.password);
-              // Get user data from Firestore
-              userData = await userService.getUserById(userCredential.user.uid);
-              
-              // Create session for Firebase Auth user
-              const emailLoginSession: UserSession = {
-                uid: userCredential.user.uid,
-                email: userCredential.user.email || formData.email || undefined,
-                displayName: userCredential.user.displayName || userData?.displayName || formData.name,
-                phoneNumber: userData?.phoneNumber,
-                role: userData?.role || 'customer',
-                sessionToken: SessionManager.generateSessionToken(),
-                loginTime: Date.now(),
-                expiresAt: Date.now() + (24 * 60 * 60 * 1000), // 24 hours
-                passwordChangedAt: userData?.passwordChangedAt || undefined,
-              };
-
-              await login(emailLoginSession);
-              toast.showLoginSuccess();
-              setTimeout(() => {
-                if (emailLoginSession.role === 'admin' || emailLoginSession.role === 'sub-admin') {
-                  router.replace('/admin');
-                } else if (emailLoginSession.role === 'delivery') {
-                  router.replace('/delivery/deliverydashboard');
-                } else {
-                  router.replace('/customer/home');
-                }
-              }, 300);
-              return;
-                         } catch {
-               // If all authentication methods fail, throw the original customer error
-               throw customerError;
-             }
+            // If all custom auth methods fail, rethrow the original customer error
+            throw customerError;
           }
         }
       } else {
@@ -848,10 +810,6 @@ export default function AuthScreen() {
         await customerAuthService.updateCustomerPassword(foundUser.uid, forgotPasswordNewPassword);
         console.log('Password updated in Firestore');
       }
-
-      // Note: Since we're now using custom authentication (same as sub-admin/delivery),
-      // we don't need to update Firebase Auth password anymore. The password is stored
-      // in Firestore and used directly for authentication, just like sub-admin and delivery services.
 
       toast.showPasswordResetSuccess();
       

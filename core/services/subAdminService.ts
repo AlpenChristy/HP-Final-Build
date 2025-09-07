@@ -1,13 +1,9 @@
 // File: core/services/subAdminService.ts
-import { initializeApp } from 'firebase/app';
-import { createUserWithEmailAndPassword, deleteUser, getAuth, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
 import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
-import { FIREBASE_DB, firebaseConfig } from '../firebase/firebase';
+import { FIREBASE_DB } from '../firebase/firebase';
 import { userService } from './userService';
 
-// Use secondary app to create sub-admin auth users without affecting current admin session
-const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
-const secondaryAuth = getAuth(secondaryApp);
+// Firebase Auth removed: operations are Firestore-only.
 
 // Sub-admin permissions interface
 export interface SubAdminPermissions {
@@ -68,33 +64,16 @@ export const subAdminService = {
         }
       }
 
-      // 1) Create Firebase Auth user via secondary instance (prevents admin sign-out)
-      let user;
-      if (subAdminData.email) {
-        const { user: firebaseUser } = await createUserWithEmailAndPassword(
-          secondaryAuth,
-          subAdminData.email,
-          subAdminData.password
-        );
-        user = firebaseUser;
-        
-        // Update Firebase Auth profile with displayName
-        await updateProfile(firebaseUser, {
-          displayName: subAdminData.displayName
-        });
-      } else {
-        // If no email, we need to create a custom UID for phone-only sub-admins
-        const customUid = `phone_subadmin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        user = { uid: customUid } as any;
-      }
+      // 1) Create a custom UID (no Firebase Auth)
+      const uid = `subadmin_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
       // 2) Create user doc in unified users collection
       const userData: any = {
-        uid: user.uid,
+        uid,
         displayName: subAdminData.displayName,
         role: 'sub-admin',
       };
-      
+
       // Only add email and phone if they are provided (not undefined)
       if (subAdminData.email) {
         userData.email = subAdminData.email;
@@ -102,11 +81,11 @@ export const subAdminService = {
       if (subAdminData.phoneNumber) {
         userData.phoneNumber = subAdminData.phoneNumber;
       }
-      
+
       await userService.createUser(userData);
 
       // 3) Add sub-admin specific fields on the same users doc
-      const userRef = doc(FIREBASE_DB, 'users', user.uid);
+      const userRef = doc(FIREBASE_DB, 'users', uid);
       await updateDoc(userRef, {
         permissions: subAdminData.permissions,
         isActive: true,
@@ -117,20 +96,15 @@ export const subAdminService = {
         updatedAt: timestamp,
       });
 
-      // 4) Sign out secondary auth to clean up (only if we created a Firebase Auth user)
-      if (subAdminData.email) {
-        await signOut(secondaryAuth);
-      }
-
-      return user.uid;
+      return uid;
     } catch (error) {
       console.error('Error creating sub-admin:', error);
-      
+
       // Handle specific errors
       if ((error as any).code === 'permission-denied') {
         throw new Error('Permission denied. Please check your admin privileges.');
       }
-      
+
       throw new Error('Failed to create sub-admin');
     }
   },
@@ -144,10 +118,10 @@ export const subAdminService = {
         where('createdBy', '==', adminUid),
         where('isActive', '==', true)
       );
-      
+
       const querySnapshot = await getDocs(q);
       const subAdmins: SubAdminData[] = [];
-      
+
       querySnapshot.forEach((doc) => {
         const d = doc.data() as any;
         subAdmins.push({
@@ -163,7 +137,7 @@ export const subAdminService = {
           isActive: d.isActive,
         });
       });
-      
+
       return subAdmins;
     } catch (error) {
       console.error('Error getting sub-admins:', error);
@@ -243,7 +217,7 @@ export const subAdminService = {
       // Update in users collection with proper field handling
       const userRef = doc(FIREBASE_DB, 'users', uid);
       const payload: any = { updatedAt: Date.now() };
-      
+
       if (profileData.displayName !== undefined) payload.displayName = profileData.displayName;
       if (profileData.phoneNumber !== undefined) {
         // Handle phone number - if empty string, remove the field from Firestore
@@ -261,7 +235,7 @@ export const subAdminService = {
           payload.email = profileData.email.trim();
         }
       }
-      
+
       await updateDoc(userRef, payload);
     } catch (error) {
       console.error('Error updating sub-admin profile:', error);
@@ -273,47 +247,20 @@ export const subAdminService = {
   async changeSubAdminPassword(uid: string, newPassword: string): Promise<void> {
     try {
       const timestamp = Date.now();
-      
-      // 1. Get current user data BEFORE updating (to get the old password)
+
+      // 1. Get current user data BEFORE updating (to validate existence)
       const userRef = doc(FIREBASE_DB, 'users', uid);
       const userDoc = await getDoc(userRef);
       if (!userDoc.exists()) {
         throw new Error('Sub-admin not found');
       }
-      
-      const userData = userDoc.data() as any;
-      const email = userData.email;
-      const oldPassword = userData.password;
-      
-      if (!oldPassword) {
-        throw new Error('Password not found in user data');
-      }
 
-      // 2. Update Firebase Auth password using secondary auth FIRST (only if email exists)
-      if (email) {
-        try {
-          // Sign in with old password to get current user
-          await signInWithEmailAndPassword(secondaryAuth, email, oldPassword);
-          
-          // Update password in Firebase Auth
-          if (secondaryAuth.currentUser) {
-            await (secondaryAuth.currentUser as any).updatePassword(newPassword);
-          }
-        } catch (authError) {
-          console.warn('Warning: Failed to update Firebase Auth password:', authError);
-          // Continue anyway as the Firestore update is more important for session invalidation
-        } finally {
-          try { await signOut(secondaryAuth); } catch {}
-        }
-      }
-
-      // 3. Update the password and passwordChangedAt timestamp in Firestore
+      // 2. Update the password and passwordChangedAt timestamp in Firestore
       await updateDoc(userRef, {
         password: newPassword,
         passwordChangedAt: timestamp, // This will invalidate all existing sessions
         updatedAt: timestamp,
       });
-
     } catch (error) {
       console.error('Error changing sub-admin password:', error);
       throw new Error('Failed to change sub-admin password');
@@ -337,13 +284,13 @@ export const subAdminService = {
       const usersRef = collection(FIREBASE_DB, 'users');
       const q = query(usersRef, where('email', '==', email));
       const snapshot = await getDocs(q);
-      
+
       // Only consider active users (not deleted ones)
-      const activeUser = snapshot.docs.find(doc => {
+      const activeUser = snapshot.docs.find((doc) => {
         const data = doc.data();
         return data.isActive !== false; // Consider user active if isActive is true or undefined
       });
-      
+
       return !!activeUser;
     } catch (error) {
       console.error('Error checking email existence:', error);
@@ -357,13 +304,13 @@ export const subAdminService = {
       const usersRef = collection(FIREBASE_DB, 'users');
       const q = query(usersRef, where('phoneNumber', '==', phone));
       const snapshot = await getDocs(q);
-      
+
       // Only consider active users (not deleted ones)
-      const activeUser = snapshot.docs.find(doc => {
+      const activeUser = snapshot.docs.find((doc) => {
         const data = doc.data();
         return data.isActive !== false; // Consider user active if isActive is true or undefined
       });
-      
+
       return !!activeUser;
     } catch (error) {
       console.error('Error checking phone existence:', error);
@@ -378,13 +325,13 @@ export const subAdminService = {
       if (!phone || phone.trim() === '') {
         return false;
       }
-      
+
       const usersRef = collection(FIREBASE_DB, 'users');
       const q = query(usersRef, where('phoneNumber', '==', phone));
       const snapshot = await getDocs(q);
-      
+
       // Check if any active user other than the excluded one has this phone number
-      const conflictingUser = snapshot.docs.find(doc => {
+      const conflictingUser = snapshot.docs.find((doc) => {
         const data = doc.data();
         return doc.id !== excludeUid && data.isActive !== false; // Only consider active users
       });
@@ -402,13 +349,13 @@ export const subAdminService = {
       if (!email || email.trim() === '') {
         return false;
       }
-      
+
       const usersRef = collection(FIREBASE_DB, 'users');
       const q = query(usersRef, where('email', '==', email));
       const snapshot = await getDocs(q);
-      
+
       // Check if any active user other than the excluded one has this email
-      const conflictingUser = snapshot.docs.find(doc => {
+      const conflictingUser = snapshot.docs.find((doc) => {
         const data = doc.data();
         return doc.id !== excludeUid && data.isActive !== false; // Only consider active users
       });
@@ -422,35 +369,9 @@ export const subAdminService = {
   // Delete sub-admin permanently
   async deleteSubAdmin(uid: string): Promise<void> {
     try {
-      const userRef = doc(FIREBASE_DB, 'users', uid);
-      const snap = await getDoc(userRef);
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        const email = data.email;
-        const password = data.password; // per existing flow
-
-        // Try to delete Auth user by signing in on secondary auth
-        if (email && password) {
-          try {
-            await signInWithEmailAndPassword(secondaryAuth, email, password);
-            if (secondaryAuth.currentUser) {
-              await deleteUser(secondaryAuth.currentUser);
-            }
-          } catch (authErr) {
-            console.warn('Warning: Failed to delete Firebase Auth user for sub-admin:', authErr);
-            
-            // If we can't sign in with stored password, the Firebase Auth user will remain
-            // This is expected behavior when passwords have been changed
-            console.log('Firebase Auth user could not be deleted - this is normal if password was changed');
-          } finally {
-            try { await signOut(secondaryAuth); } catch {}
-          }
-        }
-      }
-
       // Delete the document from Firestore
-      await deleteDoc(userRef);
-      
+      await deleteDoc(doc(FIREBASE_DB, 'users', uid));
+
       console.log(`Sub-admin ${uid} deleted successfully`);
     } catch (error) {
       console.error('Error deleting sub-admin:', error);
@@ -466,11 +387,11 @@ export const subAdminService = {
   // Get allowed screens for sub-admin based on permissions
   getAllowedScreens(permissions: SubAdminPermissions): string[] {
     const allowedScreens: string[] = [];
-    
+
     if (permissions.orders) allowedScreens.push('orders');
     if (permissions.products) allowedScreens.push('products');
     if (permissions.delivery) allowedScreens.push('delivery');
-    
+
     return allowedScreens;
   },
 
@@ -483,42 +404,22 @@ export const subAdminService = {
         where('role', '==', 'sub-admin'),
         where('isActive', '==', false)
       );
-      
+
       const snapshot = await getDocs(q);
       let successCount = 0;
       let failedCount = 0;
-      
+
       for (const doc of snapshot.docs) {
         try {
-          const data = doc.data() as any;
-          const email = data.email;
-          const password = data.password;
-          
-          // Try to delete Firebase Auth user
-          if (email && password) {
-            try {
-              await signInWithEmailAndPassword(secondaryAuth, email, password);
-              if (secondaryAuth.currentUser) {
-                await deleteUser(secondaryAuth.currentUser);
-                successCount++;
-              }
-            } catch (authErr) {
-              console.warn(`Failed to delete Auth user for ${email}:`, authErr);
-              failedCount++;
-            } finally {
-              try { await signOut(secondaryAuth); } catch {}
-            }
-          }
-          
           // Delete the Firestore document
           await deleteDoc(doc.ref);
-          
+          successCount++;
         } catch (error) {
           console.error(`Error cleaning up sub-admin ${doc.id}:`, error);
           failedCount++;
         }
       }
-      
+
       return { success: successCount, failed: failedCount };
     } catch (error) {
       console.error('Error cleaning up inactive sub-admins:', error);

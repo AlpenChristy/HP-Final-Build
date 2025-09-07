@@ -380,38 +380,38 @@ export default function CartScreen() {
                 </View>
             </View>
         </View>
-      </ScrollView>
-
-      {/* Checkout Footer */}
-      {cartItems.length > 0 && (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 70 }]}>
-          <View>
-              <Text style={styles.footerTotalAmount}>₹{totalAmount.toFixed(2)}</Text>
-              <Text style={styles.footerTotalLabel}>TOTAL</Text>
-          </View>
-          <TouchableOpacity 
-              style={styles.checkoutButton} 
-              onPress={async () => {
+        
+        {/* Checkout Section (inline, below content) */}
+        {cartItems.length > 0 && (
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 16, borderRadius: 16, borderWidth: 1, borderColor: Colors.border }]}>
+            <View>
+                <Text style={styles.footerTotalAmount}>₹{totalAmount.toFixed(2)}</Text>
+                <Text style={styles.footerTotalLabel}>TOTAL</Text>
+            </View>
+            <TouchableOpacity 
+                style={styles.checkoutButton} 
+                onPress={async () => {
                   if (cartItems.length === 0) {
-                      Alert.alert('Empty Cart', 'Please add items to your cart before checkout.');
-                      return;
+                    Alert.alert('Empty Cart', 'Please add items to your cart before checkout.');
+                    return;
                   }
                   
                   // Increment promocode usage if applied
                   if (appliedPromocode) {
-                      try {
-                          await promocodeService.incrementUsageCount(appliedPromocode.id);
-                      } catch (error) {
-                          console.error('Error incrementing promocode usage:', error);
-                      }
+                    try {
+                      await promocodeService.incrementUsageCount(appliedPromocode.id);
+                    } catch (error) {
+                      console.error('Error incrementing promocode usage:', error);
+                    }
                   }
                   router.push('/customer/checkout');
-              }}
-          >
-              <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+                }}
+            >
+                <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 120, // Space for the footer
+    paddingBottom: 20, // Regular bottom padding since footer is inline now
   },
   section: {
     marginBottom: 24,
@@ -676,23 +676,21 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: Colors.surface,
     padding: 16,
     paddingTop: 16,
-    borderTopWidth: 1,
+    borderWidth: 1,
     borderColor: Colors.border,
+    borderRadius: 16,
+    overflow: 'hidden',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 6,
   },
   footerTotalAmount: {
     fontSize: 18,
