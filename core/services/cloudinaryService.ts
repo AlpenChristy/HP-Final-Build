@@ -2,8 +2,8 @@
 import * as ImagePicker from 'expo-image-picker';
 
 // Cloudinary configuration
-const CLOUDINARY_CLOUD_NAME = 'dbfbbmy79';
-const CLOUDINARY_UPLOAD_PRESET = 'vihar_products'; // Create this in your Cloudinary dashboard
+const CLOUDINARY_CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
 
 // Optional picker options so callers can choose to crop or not
 type PickerOptions = {

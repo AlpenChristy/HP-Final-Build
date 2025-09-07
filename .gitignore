@@ -29,9 +29,37 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# Environment files and sensitive data
 .env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.*.local
+.env.*.development
+.env.*.production
+.env.*.staging
+
+# Sensitive configuration files
+config.json
+secrets.json
+credentials.json
+firebase-adminsdk-*.json
+service-account-*.json
+
+# Android signing files
+android/app/upload-keystore.jks
+android/app/release-keystore.jks
+android/app/production-keystore.jks
+android/app/*-keystore.jks
+android/app/keystore.properties
+android/keystore.properties
+
+# iOS certificates and provisioning profiles
+ios/*.p8
+ios/*.p12
+ios/*.mobileprovision
+ios/*.cer
 
 # typescript
 *.tsbuildinfo

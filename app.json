@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "",
+    "name": "HP Gas App",
     "slug": "hp-gas-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -79,7 +79,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "0a5674ed-6dae-4c49-ac0b-0643b2911f78"
+        "projectId": "3f63bff3-f2ee-451a-a56a-56f19d752f50"
       }
     }
   }
